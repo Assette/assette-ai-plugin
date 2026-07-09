@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "assette_mcp_shim"
+version = "0.10.1"
+description = "Smart Page fabricator helper scripts. Pre-0.2.0 this package hosted the MCP stdio shim itself; v0.2.0 replaced that with a Node.js bundle (../bin/assette-mcp-shim.bundle.js). Only the scripts/* helpers (pptx_extract_tags, pptx_add_table_slide, smartpage_decode_pptx, wipe_tenant_caches, read_cache) and a tiny runtime/locations.py remain here — invoked on-demand by the Node binary's ScriptsBridge when the fabricator skill needs pptx post-processing."
+requires-python = ">=3.10"
+dependencies = [
+  # Fabricator + pptx_* helper scripts only. The pre-0.2.0 shim runtime
+  # deps (mcp / msal / msal-extensions / httpx) are gone — the Node
+  # binary owns all MCP / auth / HTTP / proxy concerns now.
+  #
+  # Mirror these in:
+  #   * shim-node/src/runtime/scriptsBootstrap.ts::PINNED_DEPS
+  #   * assette-pptx-authoring/pyproject.toml  (python-pptx fabricator)
+  #   * assette-xlsx-authoring/pyproject.toml  (openpyxl fabricator)
+  # so editable installs leave the venv consistent.
+  "python-pptx>=1.0",
+  "openpyxl>=3.1",
+  "pydantic>=2.5",
+  "lxml>=5.0",
+  "pyyaml>=6.0",
+  "deepdiff>=8.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["assette_mcp_shim*"]

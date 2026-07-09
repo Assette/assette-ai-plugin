@@ -1,0 +1,43 @@
+{
+  "//": [
+    "Client-facing marketplace manifest. This file ships INSIDE the plugin",
+    "subtree so a `git subtree split --prefix=assette-plugin` push",
+    "to Assette/assette-ai-plugin (the public mirror) carries it into",
+    "the mirror's root. Clients then install from the MIRROR repo:",
+    "    /plugin marketplace add Assette/assette-ai-plugin",
+    "    /plugin install assette@assette",
+    "Cowork users add the same marketplace through the desktop app:",
+    "    Customize > Plugins > + Add marketplace > Assette/assette-ai-plugin",
+    "",
+    "The sibling marketplace at ast-mcp-server/.claude-plugin/marketplace.json",
+    "is the INTERNAL install path (for platform engineers with access to the",
+    "private source repo) and points at the assette-plugin/",
+    "subdirectory of THIS repo. The two manifests are otherwise identical and",
+    "MUST be version-bumped together when releasing.",
+    "",
+    "source.path = '.' because after the subtree split, this plugin's contents",
+    "ARE the mirror repo's root."
+  ],
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "assette",
+  "metadata": {
+    "description": "Assette platform plugins."
+  },
+  "owner": {
+    "name": "Assette Engineering"
+  },
+  "plugins": [
+    {
+      "name": "assette",
+      "description": "Assette implementation toolkit for Assette client firms. Bundles a Node.js MCP shim that proxies the hosted Assette server plus the assette-plugin config/lifecycle skill; the five authoring skills (pptx, xlsx, block, data-object, classification) are downloaded from the hosted server after B2C sign-in. The fabricator skills still spawn Python on-demand (pptx helpers / openpyxl).",
+      "version": "0.10.1",
+      "category": "development",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/Assette/assette-ai-plugin.git",
+        "ref": "main"
+      },
+      "homepage": "https://github.com/Assette/assette-ai-plugin"
+    }
+  ]
+}
