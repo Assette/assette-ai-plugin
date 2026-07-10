@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "assette_mcp_shim"
-version = "0.10.2"
+version = "0.10.3"
 description = "Shim housekeeping helper scripts. Pre-0.2.0 this package hosted the MCP stdio shim itself; v0.2.0 replaced that with a Node.js bundle (../bin/assette-mcp-shim.bundle.js). Only the generic scripts/* helpers (wipe_tenant_caches, read_cache) and a tiny runtime/locations.py remain here. The pptx-specific fabricator helpers (pptx_extract_tags, pptx_add_table_slide, smartpage_decode_pptx) moved into the assette-pptx-authoring skill's assette_smartpage.scripts package as of v0.10.2."
 requires-python = ">=3.10"
 dependencies = [

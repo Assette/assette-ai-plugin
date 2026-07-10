@@ -30,7 +30,7 @@
     {
       "name": "assette",
       "description": "Assette implementation toolkit for Assette client firms. Bundles a Node.js MCP shim that proxies the hosted Assette server plus the assette-plugin config/lifecycle skill; the five authoring skills (pptx, xlsx, block, data-object, classification) are downloaded from the hosted server after B2C sign-in. The fabricator skills still spawn Python on-demand (pptx helpers / openpyxl).",
-      "version": "0.10.2",
+      "version": "0.10.3",
       "category": "development",
       "source": {
         "source": "url",
