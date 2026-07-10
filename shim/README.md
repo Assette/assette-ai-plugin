@@ -17,25 +17,30 @@ shim/
     ├── runtime/
     │   ├── __init__.py
     │   └── locations.py                   # plugin_root(), runtime_root() — 2 functions
-    └── scripts/                           # the 5 fabricator helpers
+    └── scripts/                           # 2 generic housekeeping helpers
         ├── __init__.py
-        ├── pptx_extract_tags.py
-        ├── pptx_add_table_slide.py
-        ├── smartpage_decode_pptx.py
         ├── wipe_tenant_caches.py
         └── read_cache.py
 ```
 
+> The three pptx-specific fabricator helpers (`pptx_extract_tags`,
+> `pptx_add_table_slide`, `smartpage_decode_pptx`) that used to live here moved
+> into the `assette-pptx-authoring` skill's `assette_smartpage.scripts` package
+> as of v0.10.2 — they only ever wrapped that skill's `tag_parts` injector, so
+> they belong with it. Only the two generic housekeeping scripts remain here.
+
 The venv lives at `<plugin>/shim/.venv/` (gitignored). The Node binary's
 `ScriptsBootstrap.ensureVenvReady` creates it on first fabricator op.
 
-## Why scripts/* stay Python
+## Why Python at all
 
-The Smart Page fabricator uses `python-pptx` + `lxml` for OOXML manipulation
-— mature libraries with no direct JavaScript equivalent at the same fidelity.
-Rather than re-implement OOXML in JS we keep the scripts in Python and the
-Node binary spawns them on-demand via
-`shim-node/src/runtime/scriptsBridge.ts`.
+The Smart Page fabricators (the `assette-pptx-authoring` / `assette-xlsx-authoring`
+skills) use `python-pptx` / `openpyxl` + `lxml` for OOXML manipulation — mature
+libraries with no direct JavaScript equivalent at the same fidelity. Rather than
+re-implement OOXML in JS we keep that work in Python. Those fabricator scripts now
+live inside their skills; this package retains only two generic housekeeping
+helpers (`wipe_tenant_caches`, `read_cache`), both stdlib-only, that the Node
+binary can spawn on-demand via `shim-node/src/runtime/scriptsBridge.ts`.
 
 This means the 80% of authors who only use blocks / content / data-object
 tools never trigger a venv install. Authors who DO use the fabricator pay
@@ -53,8 +58,9 @@ Three entry points trigger venv creation:
    `OK_ALREADY` instantly when the venv is healthy.
 
 2. **`assette-pptx-authoring` skill's first op** — calls the
-   bootstrap tool explicitly so the venv is ready before the skill runs
-   `pptx_extract_tags` or `pptx_add_table_slide` via ScriptsBridge.
+   bootstrap tool explicitly so the shared venv is ready before the skill runs
+   its own `assette_smartpage.scripts.*` fabricator helpers (`fabricate`,
+   `pptx_add_table_slide`, `pptx_extract_tags`, …).
 
 3. **Manual** — a developer running `python -m venv .venv && .venv/Scripts/pip
    install -e .` inside this directory for editable-install / IDE work.

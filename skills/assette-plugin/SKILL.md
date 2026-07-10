@@ -66,7 +66,7 @@ plugin-marketplace location) holds:
 | `<plugin>/shim/.venv/` | Python venv used **only by the Smart Page fabricator skill** for the pptx-helper scripts. Created on first `mcp__assette__bootstrap` call from the fabricator skill. Not needed for sign-in or any of the 19 `mcp__assette__*` upstream tools. |
 | `<plugin>/shim/assette_mcp_shim/scripts/` | The five fabricator helper scripts (Python). |
 | `<plugin>/skills/assette-plugin/` | This skill — the ONLY skill shipped in the plugin. |
-| `<plugin>/skills/<other>/` | The five author-facing skills, **downloaded on demand** by Initialize / Update (not shipped). Extracted here by `get_skill` so Claude Code auto-discovers them next session. |
+| `<plugin>/skills/<other>/` | The six author-facing skills, **downloaded on demand** by Initialize / Update (not shipped). Extracted here by `get_skill` so Claude Code auto-discovers them next session. |
 
 `shim_status` reports the resolved values of all of these paths so you
 can confirm where the shim is reading from before mutating anything.
@@ -139,8 +139,9 @@ truth for the wipe.
 ## Server-delivered skills
 
 Only **this** skill (`assette-plugin`) ships inside the installed plugin. The
-five **author-facing** skills —
+six **author-facing** skills —
 
+- `assette-general`
 - `assette-block-author`
 - `assette-classifications`
 - `assette-data-object-author`
@@ -204,7 +205,7 @@ in (an authenticated `mcp__assette__*` call has succeeded).
      somewhere writable). Do **not** silently continue.
 5. Skip skills already at the latest version (report them as "up to date").
 6. Write the refreshed manifest back to `runtime.localSkillsManifest` with the
-   **Write tool** — the full server catalog (all five skills + their
+   **Write tool** — the full server catalog (all six skills + their
    `latestVersion`s that were successfully installed/confirmed).
 7. Tell the user which skills were installed / updated / skipped, then instruct
    them to **start a new Claude Code session** so the host discovers the
