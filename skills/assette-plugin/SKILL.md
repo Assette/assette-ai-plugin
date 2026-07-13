@@ -15,6 +15,8 @@ operations the user might ask for:
 - switch which Assette tenant the shim talks to (`clientCode`),
 - point at a different hosted MCP server (`serverUrl`),
 - raise or lower the upload-size cap (`maxFileSizeMb`),
+- configure the Microsoft Teams channel + Graph app id for the TeamsHelper tools
+  (`teamsChannelName` / `teamsGraphClientId` — see Op 5),
 - clear cached B2C credentials (force re-sign-in),
 - wipe local content caches, OR
 - inspect the current effective configuration.
@@ -23,7 +25,7 @@ operations the user might ask for:
 `shim-config.json` is picked up by the very next `mcp__assette__*`
 call — the shim notices the file's mtime advanced, tears down the
 cached tenant / token / upstream client triple, and rebuilds against
-the new settings. **No host restart needed** for any of the three
+the new settings. **No host restart needed** for any of the five
 user-facing settings.
 
 **Always mutate through this skill's tools — never edit the config
@@ -49,9 +51,11 @@ Under that root:
 
 | Path | Contents |
 |---|---|
-| `<runtimeRoot>/shim-config.json` | The three user-facing settings (`clientCode`, `serverUrl`, `maxFileSizeMb`). Per-developer. **Written exclusively through `mcp__assette__set_client_code`** — never edit by hand. |
+| `<runtimeRoot>/shim-config.json` | The five user-facing settings (`clientCode`, `serverUrl`, `maxFileSizeMb`, and the TeamsHelper `teamsChannelName` / `teamsGraphClientId`). Per-developer. **Written exclusively through `mcp__assette__set_client_code`** — never edit by hand. |
 | `<runtimeRoot>/skills.json` | Local manifest of the downloaded author skills + their installed versions. Written by this skill (Read/Write tools) during Initialize / Update. Its shape mirrors the server's catalog. |
 | `<runtimeRoot>/msal/<CODE>.json` | MSAL token cache, one file per tenant. Plain JSON (`tokenCache.serialize()` output) with mode 0o600. Lives in the per-user-private LOCALAPPDATA / Library / XDG dir; no OS-level encryption layer in v0.2.0 (the pre-v0.2.0 Python shim used DPAPI/Keychain/libsecret via msal-extensions; the Node bundle dropped that to keep the bundle native-dep-free and cross-platform from a single .js). |
+| `<runtimeRoot>/msal/graph-<CODE>.json` | The SEPARATE MSAL cache for the TeamsHelper Microsoft Graph sign-in (an Entra work/school account — distinct from the B2C sign-in above). Same format + permissions. |
+| `<runtimeRoot>/TeamsChannel/` | TeamsHelper cache for the one locked channel: `channel.json` (messages + replies + attachment metadata), `channel_settings.json` (Graph delta token + sync state), `TeamsSharedFiles/` (downloaded attachments). **PERSISTENT — NOT wiped on shim start** (the delta token drives cheap incremental sync). A `teamsChannelName` change triggers a full re-sync automatically. |
 | `<runtimeRoot>/response_cache/*.json` | Bulky-response cache (timestamped). Auto-purged at >7 days on every shim start. |
 | `<runtimeRoot>/DataObjects/<Name>.json` | Per-tenant cache of `get_data_object_metadata` responses. **Wiped on every shim start** AND on tenant / server-URL change. |
 | `<runtimeRoot>/SmartPages/<Name>/` | Per-tenant cache of Smart Page `.pptx` + `metadata.json` + `.assette.json` triples. Same wipe rule. |
@@ -73,14 +77,16 @@ can confirm where the shim is reading from before mutating anything.
 
 ## `shim-config.json` file shape
 
-A single JSON object with three keys. All three are optional; missing
-keys fall back to the baked-in defaults:
+A single JSON object with five keys. All are optional; missing keys fall
+back to the baked-in defaults:
 
 ```json
 {
   "clientCode": "MODL",
   "serverUrl": "https://app.assette.com/mcp",
-  "maxFileSizeMb": 200
+  "maxFileSizeMb": 200,
+  "teamsChannelName": "Assette",
+  "teamsGraphClientId": "00000000-0000-0000-0000-000000000000"
 }
 ```
 
@@ -89,6 +95,8 @@ keys fall back to the baked-in defaults:
 | `clientCode` | *(empty — required for any real tool call)* | 4-letter tenant identifier. Empty / missing → first `mcp__assette__*` call returns `shim.config.client_code_missing`. |
 | `serverUrl` | `https://app.assette.com/mcp` | Trailing slashes are stripped. |
 | `maxFileSizeMb` | `200` | Positive int ≤ 10240; cap above which `*Path` inputs are rejected before the upstream call. |
+| `teamsChannelName` | `"Assette"` (skill default) | The one Teams channel the TeamsHelper tools are locked to. This skill defaults it to `"Assette"` when the user doesn't name a channel; the user can override with any bare name (`"General"`) or team-qualified `"Marketing/General"` (when the name is not unique). The shim itself has NO built-in default — an empty/missing value in the file makes the Teams tools return `shim.teams.channel_not_configured`, so the skill always writes an explicit value. |
+| `teamsGraphClientId` | *(empty)* | GUID of the multi-tenant Entra app registration for the delegated Graph sign-in. Empty → Teams tools return `shim.teams.graph_client_id_missing`. |
 
 ## Synthetic tools this skill calls
 
@@ -99,7 +107,7 @@ configured or a venv exists:
 |---|---|
 | `mcp__assette__shim_status` | Side-effect-free diagnostic. Returns the effective config, venv state, MSAL cache state, runtime paths, and node version. **Always safe to call.** |
 | `mcp__assette__bootstrap` | **Fabricator-only.** Ensures the Smart Page fabricator's `<plugin>/shim/.venv/` exists and the pinned pptx deps (python-pptx, lxml, pydantic, pyyaml, deepdiff) import cleanly. Idempotent. Returns `OK_ALREADY` / `OK_INSTALLED` / `ERR_NO_PYTHON` / `ERR_VENV_FAILED` / `ERR_PIP_FAILED` plus diagnostic tail. ~20-30s on a fresh install. **This skill (assette-plugin) does NOT call bootstrap as part of initialize** — the fabricator skill calls it on its own first op. Authors who only use the 19 `mcp__assette__*` upstream tools never need this. |
-| `mcp__assette__set_client_code` | Atomically writes the per-user `shim-config.json`. Accepts `clientCode` (required, validated `^[A-Z]{4}$`), `serverUrl` (optional), `maxFileSizeMb` (optional). Preserves unsupplied fields. Returns the absolute path written. |
+| `mcp__assette__set_client_code` | Atomically writes the per-user `shim-config.json`. Accepts `clientCode` (required, validated `^[A-Z]{4}$`), `serverUrl` (optional), `maxFileSizeMb` (optional), `teamsChannelName` (optional; bare or `Team/Channel`, `""` clears), `teamsGraphClientId` (optional; GUID, `""` clears). Preserves unsupplied fields. Returns the absolute path written. |
 
 ## Credential cache (`<runtimeRoot>/msal/`)
 
@@ -608,15 +616,48 @@ immediate re-prompt instead of waiting for a tool round-trip:
 | `clientCode` | Trim → uppercase → must match exactly `^[A-Z]{4}$`. Returns `shim.config.invalid_client_code` on failure. |
 | `serverUrl` | Must start with `http://` or `https://`; trailing `/` stripped. Returns `shim.config.invalid_server_url` on failure. |
 | `maxFileSizeMb` | Positive integer between 1 and 10240. Returns `shim.config.invalid_max_file_size` on failure. |
+| `teamsChannelName` | Trimmed; rejects control characters. `""` clears. Returns `shim.config.invalid_teams_channel_name` on failure. |
+| `teamsGraphClientId` | GUID (braces stripped, lower-cased). `""` clears. Returns `shim.config.invalid_teams_graph_client_id` on failure. |
+
+## Op 5: Configure the Microsoft Teams channel (TeamsHelper)
+
+Trigger: *"set my Teams channel"*, *"connect Teams"*, *"use the Marketing/General channel"*.
+
+The four TeamsHelper tools (`sync_teams_channel`, `post_teams_message`,
+`reply_teams_post`, `update_teams_shared_file`) act on ONE locked channel as the
+current user via Microsoft Graph. Two settings gate them:
+
+1. **Determine the channel** — default to **`"Assette"`** unless the user names a
+   different one. Accept a bare name (`"General"`) or, when the name is not unique
+   across the user's teams, a qualified `"Team/Channel"`. If a later
+   `sync_teams_channel` returns `shim.teams.channel_ambiguous`, re-prompt for the
+   qualified form.
+2. **Ensure the Graph app id is set.** `teamsGraphClientId` is the multi-tenant
+   Entra app-registration GUID your Assette administrator provides (registered
+   with the Teams delegated Graph scopes and `http://localhost:8080/callback`).
+   Ask the admin if the user doesn't have it.
+3. **Write via `mcp__assette__set_client_code`** with `clientCode` plus
+   `teamsChannelName` and (if supplied) `teamsGraphClientId`. Unsupplied fields
+   are preserved.
+   ```
+   mcp__assette__set_client_code(clientCode="MODL",
+       teamsChannelName="Assette",
+       teamsGraphClientId="00000000-0000-0000-0000-000000000000")
+   ```
+4. **Tell the user** the FIRST TeamsHelper tool call opens a SECOND browser
+   sign-in — a Microsoft work/school (Entra) sign-in, separate from the Assette
+   B2C sign-in — and that the channel is cached under `TeamsChannel/` (persistent
+   across sessions; `sync_teams_channel` is incremental after the first run).
 
 ## "No restart required" — confirming the new contract
 
-Mutating any of the three settings is **hot-reloaded** by the shim
+Mutating any of the five settings is **hot-reloaded** by the shim
 on the next tool call. The shim notices the file's mtime advanced,
 tears down the cached tenant / token / upstream client triple if
 `clientCode` or `serverUrl` changed, and rebuilds against the new
-settings. `maxFileSizeMb` doesn't even need a teardown — it's read
-fresh on every call.
+settings. `maxFileSizeMb` and the two `teams*` settings don't even need a
+teardown — they're read fresh on every call (the Teams tools have their own
+Graph auth, independent of the Assette upstream).
 
 For a credentials-only clear (Op 4), nothing needs to restart either
 — the next call just re-auths through the browser.
