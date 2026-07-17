@@ -1,7 +1,7 @@
 {
   "name": "assette",
   "version": "0.14.0",
-  "description": "Assette Implementation — Node.js MCP shim + the plugin-config skill. The five authoring skills (PowerPoint + Excel smart-page fabricators, block author, data-object author, content classification) are delivered by the hosted server after sign-in via 'initialize assette' / 'update assette'.",
+  "description": "Assette Implementation — Node.js MCP shim + the plugin-config skill. The author-facing skills (PowerPoint / Excel / Word smart-page fabricators, Data Doc author, block author, data-object author, content classification, plus general orientation) are delivered by the hosted server after sign-in via 'initialize assette' / 'update assette'.",
   "author": {
     "name": "Assette"
   },
