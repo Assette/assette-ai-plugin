@@ -1,6 +1,6 @@
 ﻿---
 name: assette-plugin
-description: Invoke as `assette:assette-plugin` (Claude Code namespaces every plugin skill as `<plugin>:<skill>`; the bare `assette-plugin` does not resolve). Initialize, authenticate, and manage the Assette MCP plugin. Drives first-time setup (capture client code + server URL, open the browser for B2C sign-in, then download the author-facing skills from the server), updates/syncs those downloaded skills to the latest versions, switches the Assette tenant (clientCode), changes the hosted MCP server URL — including by environment alias (`local`, `dev`/`development`, `qa`, `prd`/`production`) which resolve to the canonical Assette URLs — raises or lowers the upload size cap, clears cached B2C credentials, wipes the local DataObjects / SmartPages / DataBlocks cache folders, or just shows the current effective config. Triggers on phrases like "initialize Assette plugin", "init assette", "set up Assette", "first-time Assette setup", "connect me to Assette", "update Assette plugin", "update assette", "sync Assette skills", "download the Assette skills", "sign in to Assette", "authenticate me", "log in", "change my Assette client code", "switch Assette tenant", "set Assette server to dev", "set Assette MCP server url to production", "update Assette MCP server to use local server url", "use the qa MCP server", "point at the production server", "increase upload limit to N MB", "clear Assette credentials", "sign out from Assette", "wipe my Assette caches", "reset my Assette config", "show current Assette settings", "what's my Assette tenant".
+description: Invoke as `assette:assette-plugin` (Claude Code namespaces every plugin skill as `<plugin>:<skill>`; the bare `assette-plugin` does not resolve). Initialize, authenticate, and manage the Assette MCP plugin. Drives first-time setup (capture client code + server URL, open the browser for B2C sign-in, then download the author-facing skills from the server), updates/syncs those downloaded skills to the latest versions, switches the Assette tenant (clientCode), changes the hosted MCP server URL — including by environment alias (`local`, `dev`/`development`, `qa`, `prd`/`production`) which resolve to the canonical Assette URLs — raises or lowers the upload size cap, clears cached B2C credentials, wipes the local DataObjects / SmartPages / DataBlocks cache folders, or just shows the current effective config. Triggers on phrases like "initialize Assette plugin", "init assette", "set up Assette", "first-time Assette setup", "connect me to Assette", "update Assette plugin", "update assette", "sync Assette skills", "download the Assette skills", "sign in to Assette", "authenticate me", "log in", "change my Assette client code", "switch Assette tenant", "set Assette server to dev", "set Assette MCP server url to production", "update Assette MCP server to use local server url", "use the qa MCP server", "point at the production server", "increase upload limit to N MB", "clear Assette credentials", "sign out from Assette", "wipe my Assette caches", "reset my Assette config", "show current Assette settings", "what's my Assette tenant", "remove the assette-block-author skill", "uninstall an Assette skill", "delete a downloaded Assette skill from my machine".
 ---
 
 # Assette MCP plugin — initialization + configuration
@@ -147,27 +147,33 @@ truth for the wipe.
 ## Server-delivered skills
 
 Only **this** skill (`assette-plugin`) ships inside the installed plugin. The
-six **author-facing** skills —
-
-- `assette-general`
-- `assette-block-author`
-- `assette-classifications`
-- `assette-data-object-author`
-- `assette-pptx-authoring`
-- `assette-xlsx-authoring`
-
-— expose Assette internals and are therefore **not** shipped in the public
+other skills are **not** shipped in the public
 plugin. They live inside the hosted, B2C-gated MCP server and are **downloaded
 on demand** by the *Initialize* / *Update* operations below, into the installed
 plugin's own `skills/` directory, only after the user has signed in.
 
-Two **upstream** `mcp__assette__*` tools drive this (they ride the normal B2C
-gate, so they only work once the user is authenticated):
+Two **upstream** `mcp__assette__*` tools drive installs (they ride the normal
+B2C gate, so they only work once the user is authenticated). There is no
+upstream "delete" tool — removal is a purely **local** filesystem operation
+this skill performs itself (see "Sync skills" step 4 and Op 9 below), the same
+way credential-cache clearing (Op 4) deletes a file with the Bash/PowerShell
+tool rather than calling a server endpoint:
 
 | Tool | Purpose |
 |---|---|
-| `mcp__assette__get_skill_versions` | Returns the server catalog — `{ statusCode, body }` where body is `{ "skills": [ { "skill", "latestVersion" }, … ] }`. |
+| `mcp__assette__get_skill_versions` | Returns the server catalog — `{ statusCode, body }` where body is `{ "skills": [ { "skill", "latestVersion" }, … ] }`. A skill entry with no `latestVersion`, or `latestVersion` `null`/empty, means the server is **retiring** that name — see below. |
 | `mcp__assette__get_skill` | Downloads one skill and installs it. Takes `skill` (required) and `path` (optional extract dir). The **shim** decodes the returned zip, **wipes the target dir, and extracts** into it; the reply is a small `{ installed, skill, version, path, files, bytes }` envelope (never the zip bytes) — `version` is the current on-disk version reported by the server. Default target when `path` is omitted: `<pluginSkillsDir>/<skill>`. |
+
+**Renaming a server-delivered skill.** There's no in-place rename — a skill
+folder name is its identity in both the server catalog and the local
+manifest. To rename `assette-old-name` to `assette-new-name`: publish
+`assette-new-name` with a `latestVersion` in the server catalog, and retire
+`assette-old-name` (drop it from the catalog, or keep the entry with
+`latestVersion` missing/`null`/empty). The next sync then installs the new
+name and — via the retirement check in "Sync skills" step 4 — deletes the old
+folder from every client machine automatically. No separate migration step,
+and no action needed beyond the normal "update assette" flow authors already
+run.
 
 Paths come from `mcp__assette__shim_status`:
 
@@ -196,29 +202,46 @@ in (an authenticated `mcp__assette__*` call has succeeded).
    "not installed". Parse it into a `{ skill → installedVersion }` map.
 3. Call `mcp__assette__get_skill_versions`. If it returns a non-200
    (`statusCode` in `body`), stop and report — the server has no catalog.
-4. For each `{ skill, latestVersion }` in the server catalog, download when the
-   skill is **missing locally** OR `latestVersion` differs from the installed
-   version (treat any difference as "update available"):
+4. **Retire skills the server no longer serves — this is the mechanism that
+   makes renaming a skill safe.** A skill is retired when its name is in the
+   local manifest map from step 2 but, in the server catalog from step 3, it's
+   either absent entirely, or present with no `latestVersion` attribute, or
+   `latestVersion` is `null`/empty. For each retired skill **except
+   `assette-plugin`** (this skill ships in the plugin install, never lives
+   under a downloaded-skill path, and must never be deleted even if it somehow
+   shows up here):
+   - Delete `<pluginSkillsDir>/<skill>` recursively — Bash tool `rm -rf
+     "<path>"` (cross-platform), or the PowerShell tool on Windows
+     (`Remove-Item -Recurse -Force "<path>"`). Skip silently if the folder is
+     already gone (e.g. a previous sync already removed it).
+   - Drop it from the in-memory manifest map so step 7 doesn't write it back.
+   - Track its name to report as "removed" in the final summary.
+5. For each remaining `{ skill, latestVersion }` (i.e. not retired in step 4)
+   with a non-empty `latestVersion`, download when the skill is **missing
+   locally** OR `latestVersion` differs from the installed version (treat any
+   difference as "update available"):
    - Call `mcp__assette__get_skill(skill=<skill>,
      path="<pluginSkillsDir>/<skill>")`. Build the `path` by joining
      `runtime.pluginSkillsDir` + the OS separator + `<skill>` (the shim wipes
      that dir and extracts into it). Passing `path` explicitly (rather than
      relying on the default) keeps the target unambiguous. The server always
      packs the current on-disk copy; the version comes back in the response
-     envelope (`version`), which you record in the local manifest in step 6.
+     envelope (`version`), which you record in the local manifest in step 7.
    - On `installed: true`, record the new version.
    - On a `shim.skill.extract_failed` error (e.g. the plugin lives in a
      read-only store), report the exact `path` from the error and stop — the
      author must make that directory writable (or the plugin must be installed
      somewhere writable). Do **not** silently continue.
-5. Skip skills already at the latest version (report them as "up to date").
-6. Write the refreshed manifest back to `runtime.localSkillsManifest` with the
-   **Write tool** — the full server catalog (all six skills + their
-   `latestVersion`s that were successfully installed/confirmed).
-7. Tell the user which skills were installed / updated / skipped, then instruct
-   them to **start a new Claude Code session** so the host discovers the
-   freshly-installed skills (`/reload-plugins` may also pick them up
-   mid-session, but a new session is the reliable path).
+6. Skip skills already at the latest version (report them as "up to date").
+7. Write the refreshed manifest back to `runtime.localSkillsManifest` with the
+   **Write tool** — every skill that is actually installed after this sync
+   (skills retired in step 4 excluded; skills installed/updated/confirmed in
+   step 5 included).
+8. Tell the user which skills were installed / updated / removed / skipped,
+   then instruct them to **start a new Claude Code session** so the host
+   discovers the freshly-installed skills and drops the removed ones
+   (`/reload-plugins` may also pick this up mid-session, but a new session is
+   the reliable path).
 
 ## Operations
 
@@ -324,12 +347,14 @@ install that most authors never use is bad first-run UX.
 
 7. **Download the author-facing skills.** Run the **Sync skills** subroutine
    (see "Server-delivered skills" above): read the local manifest, call
-   `get_skill_versions`, download each missing/outdated skill into
-   `<pluginSkillsDir>/<skill>`, and write the refreshed local `skills.json`.
+   `get_skill_versions`, remove any retired skill folders, download each
+   missing/outdated skill into `<pluginSkillsDir>/<skill>`, and write the
+   refreshed local `skills.json`.
 
 8. **Report and prompt a restart.** On a clean sync:
    *"Initialized! Signed in as `<name>` (`<email>`) for tenant `<CODE>`, and
-   downloaded the Assette author skills (<list of skills>). **Start a new Claude
+   downloaded the Assette author skills (<list of skills>)<, and removed
+   `<retired skills>` (no longer served) — if any>. **Start a new Claude
    Code session** to load them. (If you later use the Smart Page fabricator,
    that skill installs its own Python venv on first use — nothing to do now.)"*
    If a skill failed with `shim.skill.extract_failed`, report which one and the
@@ -572,9 +597,11 @@ Trigger phrases: *"update Assette plugin"*, *"update assette"*, *"sync Assette
 skills"*, *"download the latest Assette skills"*, *"are my Assette skills up to
 date?"*.
 
-This refreshes the five **server-delivered** author skills to the versions the
-hosted server currently offers. It does **not** change tenant, server URL, or
-credentials — it only downloads skills.
+This refreshes the **server-delivered** author skills to the versions the
+hosted server currently offers — including removing any local skill folder
+the server has retired (e.g. because it was renamed; see "Renaming a
+server-delivered skill" above). It does **not** change tenant, server URL, or
+credentials.
 
 **Procedure.**
 
@@ -589,21 +616,64 @@ credentials — it only downloads skills.
    continue."* (The upstream skills tools ride the normal lazy-auth path.)
 
 3. **Run the Sync skills subroutine** (see "Server-delivered skills" above):
-   read the local manifest, call `get_skill_versions`, download each
-   missing/outdated skill into `<pluginSkillsDir>/<skill>`, write the refreshed
-   local `skills.json`.
+   read the local manifest, call `get_skill_versions`, remove any retired
+   skill folders, download each missing/outdated skill into
+   `<pluginSkillsDir>/<skill>`, write the refreshed local `skills.json`.
 
 4. **Report and prompt a restart.**
-   - If any skills were installed/updated: *"Updated <list> (now at <versions>).
+   - If any skills were installed/updated/removed: *"Updated <list> (now at
+     <versions>)<, removed <retired skills> (no longer served)> if any.
      <others> were already current. **Start a new Claude Code session** to load
      the changes."*
-   - If everything was already current: *"All Assette author skills are already
-     at the latest version — nothing to download."*
+   - If everything was already current and nothing was retired: *"All Assette
+     author skills are already at the latest version — nothing to download."*
    - On `shim.skill.extract_failed`: report the skill + target path and that the
      directory must be writable.
 
 **What this operation does NOT do:** change tenant / server URL / upload cap,
 clear credentials, or touch the DataObjects / SmartPages / DataBlocks caches.
+It also never removes `assette-plugin` itself — see the retirement guard in
+the Sync skills subroutine.
+
+### 9. Remove an installed Assette skill (manual)
+
+Trigger phrases: *"remove the `<skill>` skill"*, *"uninstall `<skill>`"*,
+*"delete the assette-block-author skill from my machine"*.
+
+Use this for an ad hoc, one-off removal the user asks for directly — testing,
+disk cleanup, or forcing a clean re-download of one skill. This is distinct
+from the **automatic** retirement cleanup in the Sync skills subroutine (step
+4), which runs on every Initialize/Update and is what makes server-side
+renames self-healing across all client machines without anyone having to run
+this operation by hand.
+
+**Procedure.**
+
+1. **Never target `assette-plugin`.** It ships inside the plugin install
+   (`<plugin>/skills/assette-plugin/`), not a downloaded skill, and deleting it
+   would break this very skill mid-operation. If the user asks to remove it,
+   explain that and stop.
+2. **Probe with `mcp__assette__shim_status`**; capture
+   `runtime.pluginSkillsDir` and `runtime.localSkillsManifest`.
+3. **Confirm the exact skill name** against the local manifest (Read tool, if
+   `runtime.localSkillsManifestExists`) if what the user said is ambiguous —
+   e.g. they said "the block skill" and the manifest has
+   `assette-block-author`.
+4. **Delete `<pluginSkillsDir>/<skill>` recursively** — Bash tool `rm -rf
+   "<path>"` (cross-platform), or the PowerShell tool on Windows
+   (`Remove-Item -Recurse -Force "<path>"`). Report "nothing to remove" if the
+   folder doesn't exist rather than treating it as an error.
+5. **Update the local manifest** — read it, drop the removed skill's entry,
+   write it back with the Write tool. Skip if the manifest doesn't exist.
+6. **Tell the user**: *"Removed `<skill>` from `<path>`. If the server still
+   lists a `latestVersion` for it, running 'update assette' will re-download
+   it — this only removed the local copy, it doesn't unpublish anything
+   server-side."*
+
+**What this operation does NOT do:** change the server catalog (removal here
+is purely local — see the tools table under "Server-delivered skills" above,
+there is no upstream delete tool), touch any other skill, or change tenant /
+server URL / credentials.
 
 ## Validation rules (defence in depth)
 
