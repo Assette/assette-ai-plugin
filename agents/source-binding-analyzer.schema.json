@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assette.com/schemas/source-binding-analyzer-output.json",
+  "title": "source-binding-analyzer output",
+  "description": "Schema for ONE JSONL line written by the source-binding-analyzer subagent (Phase 2d — source binding). Each dispatched agent examines ONE ingested data source against ALL data-driven deck elements and writes one record per element it can say anything about. The deterministic post-pass (merge_validate_analysis.py --mode bind) validates every element_id against element_understanding.jsonl and every candidate column_id against source_catalog.json (fabricated ids are DROPPED), rewrites table/column names canonically from the catalog, and merges candidates across sources into workspace/source_bindings.jsonl.",
+  "type": "object",
+  "required": ["element_id", "source_id", "bindings", "confidence", "rationale"],
+  "additionalProperties": false,
+  "properties": {
+    "element_id": {
+      "description": "The deck element this record binds, copied VERBATIM from the elements payload.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}:[0-9]+:[0-9]+$"
+    },
+    "source_id": {
+      "description": "The source file this agent examined, copied verbatim from the source payload's source_id.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "bindings": {
+      "description": "One entry per deck column (or chart series) from the elements payload. Include EVERY column of the element — a column you cannot bind still gets an entry with resolution clarify / derived / no-match.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["deck_column", "candidates", "resolution"],
+        "additionalProperties": false,
+        "properties": {
+          "deck_column": {
+            "description": "The deck-side column/series name, copied verbatim from the elements payload.",
+            "type": "string"
+          },
+          "candidates": {
+            "description": "Ranked source-column candidates FROM THIS SOURCE ONLY, best first. Empty when resolution is derived / no-match. Every column_id MUST exist in the source payload you read — a fabricated id is dropped by the post-pass.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["column_id", "table", "column", "match_signal", "score"],
+              "additionalProperties": false,
+              "properties": {
+                "column_id": { "type": "string", "pattern": "^[0-9a-f]{12}:[0-9]+:[0-9]+$" },
+                "table": { "type": "string", "description": "Catalog table/sheet name (echoed; the post-pass rewrites it canonically from the catalog)." },
+                "column": { "type": "string", "description": "Catalog column name (echoed; canonicalized by the post-pass)." },
+                "match_signal": {
+                  "type": "string",
+                  "minLength": 3,
+                  "description": "Short signal string, e.g. 'exact-name', 'synonym', 'abbreviation+format', 'format-compatible', 'category-scoped', 'sample-values'."
+                },
+                "score": {
+                  "type": "number", "minimum": 0.0, "maximum": 1.0,
+                  "description": "Honest match strength. >=0.7 means you would defend this bind; a name collision with an incompatible format must NOT score high."
+                }
+              }
+            }
+          },
+          "resolution": {
+            "description": "confirm: a strong candidate exists (top score >=0.7). clarify: plausible but ambiguous candidates — a human must pick. derived: the deck column is computed (role=derived — Total, Excess Return); it has NO single source column by design. no-match: nothing plausible in this source.",
+            "type": "string",
+            "enum": ["confirm", "clarify", "derived", "no-match"]
+          },
+          "note": { "type": "string", "description": "One line — what would settle a clarify, or why the best name-match was rejected." }
+        }
+      }
+    },
+    "confidence": {
+      "description": "Honest confidence in this element's bindings as a set (not per candidate).",
+      "type": "number", "minimum": 0.0, "maximum": 1.0
+    },
+    "rationale": {
+      "type": "string", "minLength": 10, "maxLength": 500,
+      "description": "One to three sentences: which table(s) this element maps to and what drove or blocked the match."
+    }
+  }
+}

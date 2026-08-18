@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assette.com/schemas/table-chart-analyzer-output.json",
+  "title": "table-chart-analyzer output",
+  "description": "Schema for the JSON object returned by the table-chart-analyzer subagent (Phase 2c — Deep Table/Chart Understanding). The orchestrator validates every response against this schema before appending to workspace/element_understanding.jsonl and splitting the questions[] into workspace/question_queue.jsonl. One record per data-driven table/chart element (or per cross-deck sample group when multiple instances are analyzed together).",
+  "type": "object",
+  "required": [
+    "element_id",
+    "shape",
+    "data_category",
+    "authoring_component",
+    "samples_analyzed",
+    "readable",
+    "structure_provenance",
+    "verification",
+    "confidence",
+    "rationale",
+    "questions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "element_id": {
+      "description": "The element_id of the representative (richest) instance, copied verbatim from the input. Null only in the error-fallback case.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{12}:[0-9]+:[0-9]+$"
+    },
+    "member_element_ids": {
+      "description": "When multiple samples of the same table/chart were analyzed together, every instance's element_id (including element_id above). Single-sample analysis may omit this or list just the one id.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{12}:[0-9]+:[0-9]+$" }
+    },
+    "shape": {
+      "description": "What was deeply analyzed. 'image' = flattened content with NO render/crop available — structure could not be read from the object model OR from pixels (the only remaining unreadable case).",
+      "type": "string",
+      "enum": ["table", "chart", "image"]
+    },
+    "data_category": {
+      "description": "The investment-data-category, echoed from the Phase-2a classification prior (refine only with strong evidence). Null for an unreadable image or reference-other ambiguity. Same enum as the element-classifier.",
+      "type": ["string", "null"],
+      "enum": [
+        "performance",
+        "attribution",
+        "holdings",
+        "transactions",
+        "characteristics-risk",
+        "allocation-exposure",
+        "cash-flows",
+        "fees",
+        "personnel",
+        "reference-other",
+        null
+      ]
+    },
+    "authoring_component": {
+      "description": "The Assette authoring primitive, echoed from Phase 2a but REFINED with the structural evidence (e.g. promote smart-shell:table to smart-shell:zigzag once the observed max row count is known). Same enum as the element-classifier.",
+      "type": "string",
+      "enum": [
+        "smart-shell:table",
+        "smart-shell:zigzag",
+        "smart-shell:chart",
+        "smart-shell:performance-history",
+        "smart-shell:text",
+        "smart-shell:image",
+        "footnote",
+        "disclosure",
+        "fixed-content",
+        "brand-theme",
+        "parameter",
+        "none"
+      ]
+    },
+    "samples_analyzed": {
+      "description": "How many instances of this element were compared. 1 = single-sample (variance unknown, lean on priors + questions); >1 = multi-sample variance was computed.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "readable": {
+      "description": "True when a structure record exists that downstream may bind against — read from the object model (inventory cells/series) OR from a rendered page/crop image (vision) OR both (mixed); structure_provenance records which. False only when neither is available (flattened image with no render) — in that case populate questions[] and do NOT fabricate structure.",
+      "type": "boolean"
+    },
+    "structure_provenance": {
+      "description": "How the emitted structure was read. object-model: deterministically from inventory cells/series (high trust). vision: from a rendered page/crop image — structure only, values are illustrative. mixed: real extracted text inside vision-located geometry, or native + image samples combined. Provenance describes the structure you DID emit — a readable:false record (no structure) stamps object-model/deterministic. Records written before this field existed default to object-model.",
+      "type": "string",
+      "enum": ["object-model", "vision", "mixed"]
+    },
+    "verification": {
+      "description": "deterministic: machine-read structure, no human confirmation needed. needs-confirmation: vision-derived (vision|mixed provenance) — a human must confirm the structure before the Shell/Data Object is finalized. Records written before this field existed default to deterministic.",
+      "type": "string",
+      "enum": ["deterministic", "needs-confirmation"]
+    },
+    "table": {
+      "description": "Present (non-null) iff shape == 'table' AND readable == true — whether the structure came from the object model or a rendered image is recorded in structure_provenance.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["orientation", "columns", "row_model", "volume"],
+      "properties": {
+        "orientation": {
+          "description": "rows-are-records: each data row is one entity (a holding, a trade). rows-are-measures: each row is a named metric (risk-stats table). matrix: a true cross-tab.",
+          "type": "string",
+          "enum": ["rows-are-records", "rows-are-measures", "matrix", "unknown"]
+        },
+        "header": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "row_count": { "type": "integer", "minimum": 0 },
+            "has_merged_spans": { "type": "string", "enum": ["yes", "no", "unknown"] },
+            "notes": { "type": "string" }
+          }
+        },
+        "columns": {
+          "description": "One entry per column, left to right. The per-column role + format + growth IS the core deliverable downstream Data Object / Smart Shell authoring binds to.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "role", "value_format", "growth"],
+            "properties": {
+              "name": { "type": "string" },
+              "role": {
+                "description": "row-key: identifies the row (Security, Metric). label: a fixed text label. measure: a numeric data-bound value. dimension: a grouping dimension (Sector, Asset Class). derived: computed from other columns (Total, Excess). marker: a footnote/superscript marker column.",
+                "type": "string",
+                "enum": ["row-key", "label", "measure", "dimension", "derived", "marker", "unknown"]
+              },
+              "value_format": {
+                "type": "string",
+                "enum": ["percent", "currency", "bps", "decimal", "integer", "ratio", "text", "date", "mixed", "unknown"]
+              },
+              "growth": {
+                "description": "fixed: this column is always present. grows-per-period: one such column is added each period (e.g. a calendar-year column added yearly). grows-per-entity: column set varies per account/product/mandate. conditional: present only in some contexts.",
+                "type": "string",
+                "enum": ["fixed", "grows-per-period", "grows-per-entity", "conditional", "unknown"]
+              },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "row_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "description": "fixed-set: a known fixed set of rows (risk metrics, period rows). repeating-group: one row per data record, count varies (holdings, transactions). mixed: a repeating group plus fixed header/subtotal/total rows.",
+              "type": "string",
+              "enum": ["fixed-set", "repeating-group", "mixed", "unknown"]
+            },
+            "group_dimension": {
+              "description": "When rows are grouped/subtotalled, the dimension they group by (e.g. Sector). Null when ungrouped.",
+              "type": ["string", "null"]
+            },
+            "observed_row_count_min": { "type": "integer", "minimum": 0 },
+            "observed_row_count_max": { "type": "integer", "minimum": 0 },
+            "special_rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["role"],
+                "properties": {
+                  "label": { "type": "string" },
+                  "role": { "type": "string", "enum": ["header", "section", "subtotal", "total", "derived"] }
+                }
+              }
+            }
+          }
+        },
+        "conditional_formatting": {
+          "description": "Row/cell-specific formatting the rendered sample implies. NOTE: the inventory does NOT carry cell fills/fonts/colors, so this is INFERRED from cell text (e.g. parenthesised or signed negatives) or ASKED — set evidence accordingly.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["trigger", "effect", "evidence"],
+            "properties": {
+              "trigger": { "type": "string", "enum": ["sign-negative", "threshold", "rank", "category", "total-row", "none", "unknown"] },
+              "effect": { "type": "string", "enum": ["font-color", "bold", "shading", "sign-paren", "data-bar", "unknown"] },
+              "columns": { "type": "array", "items": { "type": "string" } },
+              "evidence": {
+                "description": "observed: read from cell text (e.g. '(0.22%)' negatives). observed-render: seen in the rendered image (e.g. negatives drawn in red) — vision CAN legitimately see formatting the inventory cannot, but must mark it as render-sourced. inferred: domain prior. asked: surfaced as a question because neither the inventory nor a render can show it.",
+                "type": "string",
+                "enum": ["observed", "observed-render", "inferred", "asked"]
+              }
+            }
+          }
+        },
+        "volume": {
+          "description": "bounded: a Top-N / fixed-height table (-> smart-shell:table). full-list: a long list that wraps across columns/slides (-> smart-shell:zigzag).",
+          "type": "string",
+          "enum": ["bounded", "full-list", "unknown"]
+        },
+        "footnote_markers": {
+          "description": "Superscript / symbol markers in headers or cells that tie to footnote text (e.g. '1', '*', 'GIPS').",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "chart": {
+      "description": "Present (non-null) iff shape == 'chart' AND readable == true — whether the structure came from the object model or a rendered image is recorded in structure_provenance.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["chart_type", "category_axis", "series"],
+      "properties": {
+        "chart_type": { "type": "string", "description": "LINE / PIE / COLUMN / BAR / AREA / ... (python-pptx enum name) or 'unknown'." },
+        "category_axis": { "type": "string", "enum": ["time", "categorical", "unknown"] },
+        "category_growth": { "type": "string", "enum": ["fixed", "grows-per-period", "unknown"] },
+        "series": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "role"],
+            "properties": {
+              "name": { "type": ["string", "null"] },
+              "role": { "type": "string", "enum": ["portfolio", "benchmark", "category", "measure", "other", "unknown"] },
+              "growth": { "type": "string", "enum": ["fixed", "grows", "conditional", "unknown"] }
+            }
+          }
+        },
+        "combo": { "type": "boolean" },
+        "secondary_axis": { "type": "boolean" },
+        "y_units": { "type": "string", "enum": ["percent", "currency", "index", "ratio", "count", "unknown"] },
+        "data_labels": { "type": "string", "enum": ["yes", "no", "unknown"] }
+      }
+    },
+    "variance_findings": {
+      "description": "What the multi-sample comparison revealed (empty when samples_analyzed == 1). Each finding maps an observed difference/constancy across instances to a structural inference — this is how dynamic-vs-structural is DECIDED rather than guessed.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["facet", "observation", "inference"],
+        "properties": {
+          "facet": { "type": "string", "enum": ["columns", "rows", "row-count", "cell-values", "headers", "series", "categories", "formatting", "labels"] },
+          "observation": { "type": "string", "description": "What differed or stayed constant across the samples." },
+          "inference": { "type": "string", "enum": ["structural", "data-bound", "dynamic-columns", "dynamic-rows", "parameter", "conditional", "static-label", "unknown"] }
+        }
+      }
+    },
+    "vision_source_images": {
+      "description": "vision/mixed provenance only: the crop/render image path(s) you actually Read to derive the structure, copied verbatim from the samples' vision blocks. The auto-queued confirm question and the build-time verification gate point humans at these so they can compare the claimed structure against the pixels.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "dynamic_field_candidates": {
+      "description": "Columns / dimensions that should likely become shared Dynamic Fields downstream (e.g. Sector, As of Date, Benchmark Name). Richer than the classifier's single routing_hint.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "system_block_candidates": {
+      "description": "System blocks the structure implies (e.g. Sectors, Asset Classes, Countries, Currency Codes, As of Dates, Account/Product Master). Configure-only — never scaffold custom.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "confidence": {
+      "description": "Honest confidence in the deep-understanding record. Lower it when single-sample, when key facts were guessed, or when blocking questions remain. Below 0.7 routes to review alongside any blocking questions.",
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "rationale": {
+      "description": "Two to five sentences: how the structure was read, what the samples showed, and what the open questions hinge on.",
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 800
+    },
+    "questions": {
+      "description": "Active clarifying questions for the implementer — the Phase 2c HITL primitive. Ask ONLY what cannot be inferred from the sample(s) and matters downstream (see the deep-table-chart-understanding skill's ASK-vs-infer rule). Empty array when the structure is fully resolved.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question_id", "facet", "question", "blocking"],
+        "properties": {
+          "question_id": { "type": "string", "description": "Stable within this element, e.g. 'q1', 'q2'." },
+          "facet": {
+            "type": "string",
+            "enum": ["dynamic-columns", "dynamic-rows", "grouping", "row-formatting", "units", "benchmark", "gross-net", "period-basis", "top-n-vs-full", "chart-series", "source", "scope", "structure-confirm", "other"]
+          },
+          "question": { "type": "string", "minLength": 5, "maxLength": 400 },
+          "options": {
+            "description": "Candidate answers when the choice is a closed set (e.g. ['Top-N display', 'Full list']). Free-form answer expected when omitted/empty.",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "default": {
+            "description": "The best-guess answer to assume if the implementer does not respond (keeps the pipeline moving). Null when there is no safe default.",
+            "type": ["string", "null"]
+          },
+          "why": { "type": "string", "description": "One line: what downstream decision this answer changes (Shell type, Data Object shaping, disclosure pairing)." },
+          "blocking": { "type": "boolean", "description": "True when scaffolding cannot proceed correctly without an answer (compliance basis, dynamic structure). Blocking questions gate Phase 3 regardless of confidence." }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "structure_provenance": { "enum": ["vision", "mixed"] }
+        },
+        "required": ["structure_provenance"]
+      },
+      "then": {
+        "properties": {
+          "verification": { "const": "needs-confirmation" }
+        }
+      }
+    }
+  ]
+}

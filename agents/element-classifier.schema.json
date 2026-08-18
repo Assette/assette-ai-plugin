@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assette.com/schemas/element-classifier-output.json",
+  "title": "element-classifier output",
+  "description": "Schema for the JSON object returned by the element-classifier subagent. The orchestrator validates every response against this schema before appending to workspace/classifications.jsonl.",
+  "type": "object",
+  "required": ["element_id", "tag", "data_category", "authoring_component", "confidence", "rationale"],
+  "additionalProperties": false,
+  "properties": {
+    "element_id": {
+      "description": "The element_id from the input, copied verbatim. Null only in the error-fallback case.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{12}:[0-9]+:[0-9]+$"
+    },
+    "tag": {
+      "description": "Level 1 — exactly one of the six classification tags.",
+      "type": "string",
+      "enum": [
+        "static",
+        "data-driven-quantitative",
+        "data-driven-qualitative",
+        "parameterized",
+        "conditional",
+        "ambiguous"
+      ]
+    },
+    "data_category": {
+      "description": "Level 2 — the investment-data-category. Required, but MUST be null unless tag is data-driven-quantitative or data-driven-qualitative. See the investment-data-categories skill.",
+      "type": ["string", "null"],
+      "enum": [
+        "performance",
+        "attribution",
+        "holdings",
+        "transactions",
+        "characteristics-risk",
+        "allocation-exposure",
+        "cash-flows",
+        "fees",
+        "personnel",
+        "reference-other",
+        null
+      ]
+    },
+    "authoring_component": {
+      "description": "Level 2 — the Assette authoring primitive this element implies. Always set ('none' if nothing to author). See the authoring-component-identification skill.",
+      "type": "string",
+      "enum": [
+        "smart-shell:table",
+        "smart-shell:zigzag",
+        "smart-shell:chart",
+        "smart-shell:performance-history",
+        "smart-shell:text",
+        "smart-shell:image",
+        "footnote",
+        "disclosure",
+        "fixed-content",
+        "brand-theme",
+        "parameter",
+        "none"
+      ]
+    },
+    "confidence": {
+      "description": "Honest confidence in the classification (tag and Level-2 fields). Values below 0.7 are routed to the review queue.",
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "rationale": {
+      "description": "One to three sentences explaining the classification and what would change the answer.",
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 500
+    },
+    "routing_hint": {
+      "description": "Optional downstream hint (system-block-candidate:*, dynamic-field-candidate:*, etc.). See skills/element-classification/SKILL.md §3.",
+      "type": "string"
+    }
+  }
+}

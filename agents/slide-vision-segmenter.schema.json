@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assette.com/schemas/slide-vision-segmenter-output.json",
+  "title": "slide-vision-segmenter output (one visual component)",
+  "description": "Schema for ONE visual-component object emitted by the slide-vision-segmenter subagent. The agent writes one such object per line (JSONL) for every component it sees across its deck's rendered slides. merge_validate_analysis.py (--mode segment) hard-validates representative_element_id + every member_element_ids entry against the inventory before writing workspace/slide_components.jsonl.",
+  "type": "object",
+  "required": [
+    "component_id",
+    "deck_id",
+    "slide_index",
+    "component_type",
+    "label",
+    "representative_element_id",
+    "member_element_ids",
+    "proposed_authoring_component",
+    "confidence",
+    "rationale"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "component_id": {
+      "description": "Stable id for this visual component within the deck. Convention: <deck_id>:s<slide_index>:c<n> (e.g. 7f541b4845a8:s1:c2).",
+      "type": "string"
+    },
+    "deck_id": {
+      "description": "The 12-hex deck id, copied verbatim from the inventory.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "slide_index": {
+      "description": "0-based slide index (matches the container index in element ids and the rendered slide_<index>.png).",
+      "type": "integer",
+      "minimum": 0
+    },
+    "component_type": {
+      "description": "What the region IS visually, regardless of how python-pptx fragmented it. table/chart/kpi-grid/performance-history are DATA component types: they REQUIRE a non-null bbox + proposed_data_category and a data-primitive proposed_authoring_component (see allOf).",
+      "type": "string",
+      "enum": [
+        "table",
+        "chart",
+        "kpi-grid",
+        "performance-history",
+        "personnel",
+        "text-block",
+        "title",
+        "logo",
+        "footnote",
+        "disclosure",
+        "decorative",
+        "other"
+      ]
+    },
+    "label": {
+      "description": "The human-visible label/heading of the region as drawn (e.g. 'Portfolio Sector Weightings'). Empty string if none.",
+      "type": "string"
+    },
+    "representative_element_id": {
+      "description": "A REAL member element_id (must appear in member_element_ids and in the inventory) that best anchors this component — prefer a native table/chart shape, else the largest/heading shape. The component-level classification is written under this id.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}:[0-9]+:[0-9]+$"
+    },
+    "member_element_ids": {
+      "description": "Every inventory element_id that visually belongs to this component (the loose text boxes + freeforms + table that compose it). At least one; all must exist in the inventory for this slide.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{12}:[0-9]+:[0-9]+$"
+      }
+    },
+    "proposed_data_category": {
+      "description": "The investment-data-category the component carries, or null for non-data components. Same vocabulary as the classifier. REQUIRED (non-null) for data component types (table/chart/kpi-grid/performance-history) — 'reference-other' is the honest fallback when the category is unclear.",
+      "type": ["string", "null"],
+      "enum": [
+        "performance",
+        "attribution",
+        "holdings",
+        "transactions",
+        "characteristics-risk",
+        "allocation-exposure",
+        "cash-flows",
+        "fees",
+        "personnel",
+        "reference-other",
+        null
+      ]
+    },
+    "proposed_authoring_component": {
+      "description": "The Assette primitive this component implies (same enum as the classifier). Used by the component-aware classify merge.",
+      "type": "string",
+      "enum": [
+        "smart-shell:table",
+        "smart-shell:zigzag",
+        "smart-shell:chart",
+        "smart-shell:performance-history",
+        "smart-shell:text",
+        "smart-shell:image",
+        "footnote",
+        "disclosure",
+        "fixed-content",
+        "brand-theme",
+        "parameter",
+        "none"
+      ]
+    },
+    "confidence": {
+      "description": "Honest confidence that this is one coherent component with these members.",
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "rationale": {
+      "description": "One to three sentences: what the region is and the visual evidence that these shapes form it (and, when relevant, why it is distinct from a neighbouring component).",
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 600
+    },
+    "bbox": {
+      "description": "Bounding box of the component in the rendered image, normalized 0..1 as [left, top, right, bottom]. REQUIRED (non-null) for data component types (table/chart/kpi-grid/performance-history) — the analyzer crops to it; set it carefully. Optional for non-data components.",
+      "type": ["array", "null"],
+      "items": { "type": "number" },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "notes": {
+      "description": "Optional free-text notes (e.g. 'two sub-tables share this region; split into 2 components').",
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "component_type": {
+            "enum": ["table", "chart", "kpi-grid", "performance-history"]
+          }
+        }
+      },
+      "then": {
+        "required": ["bbox", "proposed_data_category"],
+        "properties": {
+          "bbox": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "proposed_data_category": {
+            "type": "string"
+          },
+          "proposed_authoring_component": {
+            "enum": [
+              "smart-shell:table",
+              "smart-shell:zigzag",
+              "smart-shell:chart",
+              "smart-shell:performance-history"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

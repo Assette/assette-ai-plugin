@@ -1,0 +1,185 @@
+{
+  "schema_version": "0.1.0",
+  "spec_version": "2.2",
+  "source": "Assette System Datasets v2.2.xlsx",
+  "description": "The system datasets an Assette tenant must provide for the platform to operate. Each dataset is a named data block executed via the Data Preparation Service (mcp__assette__execute_data_block). validate_system_data.py checks executed responses against this spec; the names here are the canonical spec names - a tenant may name blocks differently, in which case the /validate-system-data command records search_blocks candidates instead of auto-substituting.",
+  "datasets": [
+    {
+      "name": "Source_ListofAttributeTypeValues",
+      "required": true,
+      "purpose": "Master list of classification attributes such as strategy, vehicle, and client type, with their codes and display values.",
+      "why_needed": "Assette classifies every account and product by these attributes. Without them, account/product filtering, product pages, generation-tray dropdowns, and permissioning cannot resolve.",
+      "fields": [
+        { "name": "attributetype", "example": "Strategy" },
+        { "name": "attributetypecode", "example": "USCE" },
+        { "name": "attributetypevalue", "example": "US Small Cap Equity" }
+      ],
+      "constraints": [
+        {
+          "id": "attribute-types-minimum",
+          "kind": "column-values-include",
+          "column": "attributetype",
+          "must_include": ["Strategy", "Vehicle", "VehicleCategory", "AssetClass"],
+          "description": "The attributetype column must include at least: Strategy, Vehicle, VehicleCategory, AssetClass."
+        },
+        {
+          "id": "vehiclecategory-allowed-values",
+          "kind": "conditional-column-allowed-values",
+          "when_column": "attributetype",
+          "when_equals": "VehicleCategory",
+          "column": "attributetypevalue",
+          "allowed": ["Pooled", "Segregated"],
+          "description": "VehicleCategory attribute values must be one of: Pooled, Segregated."
+        }
+      ]
+    },
+    {
+      "name": "Source_CountryList",
+      "required": true,
+      "purpose": "Master list of countries related to where you offer products and create outputs.",
+      "why_needed": "Country reference data drives product-offering scopes, country dropdowns, and localized outputs.",
+      "fields": [
+        { "name": "code", "example": "us" },
+        { "name": "name", "example": "United States" }
+      ],
+      "constraints": []
+    },
+    {
+      "name": "Source_ExtractAccountsDetails",
+      "required": true,
+      "purpose": "Details about your accounts: the unique account code, name, category, key dates, base currency, and owning product.",
+      "why_needed": "Accounts are the primary axis of report generation - account pickers, permissions, performance and holdings outputs all resolve from this dataset.",
+      "fields": [
+        { "name": "portfoliocode", "example": "1106" },
+        { "name": "name", "example": "Oracle Corporation Pension Fund" },
+        { "name": "investmentstyle", "example": "NULL" },
+        { "name": "portfoliocategory", "example": "Individual Account" },
+        { "name": "opendate", "example": "2006-05-11" },
+        { "name": "performanceinceptiondate", "example": "2006-05-11" },
+        { "name": "terminationdate", "example": "null" },
+        { "name": "basecurrencycode", "example": "USD" },
+        { "name": "basecurrencyname", "example": "US Dollar" },
+        { "name": "productcode", "example": "PRDK01" }
+      ],
+      "constraints": [
+        {
+          "id": "portfoliocategory-allowed-values",
+          "kind": "column-allowed-values",
+          "column": "portfoliocategory",
+          "allowed": ["Individual Account", "Consolidated", "Group", "Composite"],
+          "description": "portfoliocategory must be one of: Individual Account, Consolidated, Group, Composite."
+        }
+      ]
+    },
+    {
+      "name": "Source_AccountAttributesValues",
+      "required": true,
+      "purpose": "Maps each account to the attributes in the attributes master list.",
+      "why_needed": "Account-to-attribute mappings power strategy/vehicle/asset-class filtering, account grouping, and content limitations. Every account must carry the core attributes for the platform to route it correctly.",
+      "fields": [
+        { "name": "portfoliocode", "example": "2900" },
+        { "name": "attributetype", "example": "Strategy" },
+        { "name": "attributetypecode", "example": "DLCV" },
+        { "name": "attributetypevalue", "example": "Diversified Large Cap Value" }
+      ],
+      "constraints": [
+        {
+          "id": "accounts-core-attribute-coverage",
+          "kind": "per-key-values-include",
+          "key_column": "portfoliocode",
+          "column": "attributetype",
+          "must_include": ["Strategy", "Vehicle", "VehicleCategory", "AssetClass"],
+          "description": "Every account must be mapped to at least: Strategy, Vehicle, VehicleCategory, AssetClass."
+        }
+      ]
+    },
+    {
+      "name": "Source_ProductMasterExtract",
+      "required": true,
+      "purpose": "Details about your products: codes, names, strategy, vehicle, asset/share class, and the performance / representative accounts.",
+      "why_needed": "Products are the second primary axis of report generation - product pickers, product profiles, and composite links all resolve from this dataset.",
+      "fields": [
+        { "name": "productcode", "example": "PRDK01" },
+        { "name": "productname", "example": "US Small Cap Equity Fund" },
+        { "name": "strategy", "example": "US Small Cap Equity" },
+        { "name": "vehiclecategory", "example": "Pooled" },
+        { "name": "vehicletype", "example": "Mutual Fund" },
+        { "name": "assetclass", "example": "Equity" },
+        { "name": "shareclass", "example": "Institutional" },
+        { "name": "performanceaccount", "example": "1106" },
+        { "name": "representativeaccount", "example": "1106" },
+        { "name": "ismarketed", "example": "1" },
+        { "name": "parentproductcode", "example": "PRDK00" }
+      ],
+      "constraints": []
+    },
+    {
+      "name": "Source_ProductOfferCountries",
+      "required": true,
+      "purpose": "Which countries each product is marketed in.",
+      "why_needed": "Drives where-offered filtering and country-specific compliance on product materials.",
+      "fields": [
+        { "name": "productcode", "example": "PRDK01" },
+        { "name": "countrycode", "example": "us" }
+      ],
+      "constraints": []
+    },
+    {
+      "name": "Source_ListOfCurrencyCodes",
+      "required": true,
+      "purpose": "Master list of currencies related to where you offer products and create outputs.",
+      "why_needed": "Currency reference data drives currency dropdowns, base-currency display, and multi-currency outputs.",
+      "fields": [
+        { "name": "currency", "example": "USD" },
+        { "name": "description", "example": "US Dollar" }
+      ],
+      "constraints": []
+    },
+    {
+      "name": "Source_IndexDetails",
+      "required": true,
+      "purpose": "The list of unique benchmarks (indexes).",
+      "why_needed": "Benchmark identity is required for any versus-benchmark performance, attribution, or characteristics output.",
+      "fields": [
+        { "name": "code", "example": "R2000" },
+        { "name": "name", "example": "Russell 2000" }
+      ],
+      "constraints": []
+    },
+    {
+      "name": "Source_IndexAccountAssociation",
+      "required": true,
+      "purpose": "Account-to-benchmark associations, ranked (primary, secondary, ...).",
+      "why_needed": "Tells the platform which benchmark(s) to show against each account - without it, benchmark columns and relative metrics cannot be produced.",
+      "fields": [
+        { "name": "portfoliocode", "example": "1106" },
+        { "name": "benchmarkcode", "example": "R2000" },
+        { "name": "rank", "example": "1" }
+      ],
+      "constraints": []
+    },
+    {
+      "name": "Source_GetGroupAccountCode",
+      "required": false,
+      "purpose": "Group accounts and their member accounts.",
+      "why_needed": "Needed when you report on group accounts - the platform expands a group into its members for consolidated outputs.",
+      "fields": [
+        { "name": "portfoliocode", "example": "GRP100" },
+        { "name": "memberportfoliocode", "example": "1106" }
+      ],
+      "constraints": []
+    },
+    {
+      "name": "Source_SubAccountsRelationship",
+      "required": false,
+      "note": "Optional, but required for permission aspects.",
+      "purpose": "The groups each account belongs to.",
+      "why_needed": "Needed for account-level permissioning - the platform resolves a user's permitted accounts through these group memberships.",
+      "fields": [
+        { "name": "code", "example": "1106" },
+        { "name": "groupaccountcode", "example": "GRP100" }
+      ],
+      "constraints": []
+    }
+  ]
+}

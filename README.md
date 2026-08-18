@@ -33,6 +33,20 @@ that ship together as the **Assette plugin**:
   Data Blocks, Brand Themes, …): buckets, limitations, compliance tags,
   and data ingredients.
 
+Plus a **deck-analysis front-end** that goes the *other* direction — point the
+**`/analyze-deck`** command at a folder of your existing PowerPoint / Word / PDF
+deliverables and Claude produces a classified, deeply-understood inventory of every
+element (which table is a Top-10 vs a full holdings list, which columns/rows are
+dynamic, what needs clarifying) to bootstrap rebuilding those decks in Assette with the
+authoring skills above. See [Analyzing existing decks](#analyzing-existing-decks).
+Three more commands take you from that analysis to a reviewed build plan —
+**`/bind-sources`**, **`/propose-build`**, **`/build-timeline`** — with
+**`/implementation-status`** to see where you stand at any time, and
+**`/validate-system-data`** to check that your Assette environment has the system
+data the platform needs (and to produce a gap report you can send to your data
+team). See
+[The implementation journey](#the-implementation-journey-from-decks-to-smart-pages).
+
 The rest of this README walks you through:
 
 1. [What you need before starting](#what-you-need-before-starting)
@@ -42,7 +56,9 @@ The rest of this README walks you through:
 5. [Searching the Assette application](#searching-the-assette-application)
 6. [Switching tenants, signing out, or wiping caches](#switching-tenants-signing-out-or-wiping-caches)
 7. [If something goes wrong](#if-something-goes-wrong)
-8. [Where to go for more detail](#where-to-go-for-more-detail)
+8. [Analyzing existing decks](#analyzing-existing-decks)
+9. [The implementation journey: from decks to Smart Pages](#the-implementation-journey-from-decks-to-smart-pages)
+10. [Where to go for more detail](#where-to-go-for-more-detail)
 
 ---
 
@@ -255,10 +271,170 @@ If none of those help, the [skill's troubleshooting section](./skills/assette-pp
 
 ---
 
+## Analyzing existing decks
+
+If you're **onboarding** — bringing a firm's existing PowerPoint / Word / PDF
+deliverables into Assette — start by pointing Claude at them:
+
+> *"/analyze-deck path/to/my/decks"*
+
+This runs these local passes:
+
+1. **Ingest** — reads every slide/page into a structured element inventory.
+2. **See the slides (vision)** — renders each slide to an image and groups the loose shapes
+   a deck is really built from (dozens of text boxes + bars that merely *look* like a chart
+   or table) into the components a human sees, so faux-charts don't explode into noise and
+   distinct tables stay distinct. *(Needs PowerPoint; skipped gracefully if it isn't present,
+   and analysis continues from structure alone.)*
+3. **Classify** — tags each element (static, data-driven, parameterized, …) and, for
+   the data-driven ones, the investment domain (holdings / performance / attribution /
+   personnel / …) and the Assette component it becomes. (Team sections — headshots,
+   titles, bios — count as *data-driven* `personnel`, sourced from personnel data objects,
+   not one-off images.)
+4. **Understand tables & charts** — for every data-driven table/chart, reads the
+   structure in depth (which columns/rows are dynamic, row-specific formatting, chart
+   series), compares **multiple samples** of the same table to learn what varies, and
+   **asks you targeted clarifying questions** ("Is this a Top-10 display or the full
+   holdings?", "Gross or net of fees?", "Which benchmark?").
+
+You answer the questions; Claude records them. The result is a `./workspace/` folder
+describing exactly what each deck contains. **Analysis is step 1 of 5 — don't jump to
+authoring from here.** The next section walks the full journey.
+
+**Setup:** the analyzer's Python helpers run in the plugin's own environment, set up by the
+plugin's **Initialize** step — which now installs everything the analyzer needs (PDF/Word
+ingest, plus slide rendering). The **vision pass additionally uses Microsoft PowerPoint** to
+render slides to images; if PowerPoint isn't available (e.g. macOS, or no Office) that one
+pass is skipped automatically and the analysis still runs from the deck's structure.
+
+---
+
+## The implementation journey: from decks to Smart Pages
+
+Analyzing the decks is only the first step. The full journey from a folder of old
+deliverables to live Assette artifacts is **five phases**, each owned by one command:
+
+```
+1 /analyze-deck   ->  2 /bind-sources  ->  3 /propose-build  ->  4 /build-timeline
+  understand the      ground it in         rank + order the      schedule it for
+  source decks        your REAL data       build plan            human review
+                                                                       |
+                                                                       v
+                                                          5 author with the skills
+                                                            (Data Block -> Data Object
+                                                             -> Smart Shell -> Smart Page)
+```
+
+Every command ends with the same **pipeline status footer** showing which phases are
+done and the exact next command — follow it and you can't get lost.
+
+There is also a **phase 0**, independent of the others and runnable any time after
+sign-in: **`/validate-system-data`** checks that your Assette environment has the
+**system data** the platform needs to operate (accounts, products, attributes,
+currencies, benchmarks, and so on — 9 required datasets, 2 optional). Run it
+**early**: missing data has to come from your firm's data team, and that takes the
+longest lead time of anything in the journey.
+
+1. **`/analyze-deck path/to/my/decks`** — the analysis above. Ends by surfacing the
+   blocking clarifying questions and pointing you at phase 2.
+2. **`/bind-sources path/to/data-extracts`** — point it at your actual data (CSV or
+   Excel extracts, a Snowflake `INFORMATION_SCHEMA` dump, or `.sql` DDL). Claude matches
+   every deck column against your real tables and columns ("deck *Weight %* ↔
+   `HOLDINGS.WEIGHT_PCT`") so that "where does this data come from?" becomes a
+   confirmation instead of an open question.
+3. **`/propose-build`** — compiles everything into a ranked, ordered build plan
+   (which Data Blocks, Data Objects, Smart Shells, and Smart Pages to build, in what
+   order, and which decisions still need a human).
+4. **`/build-timeline`** — turns the plan into a Gantt chart + schedule you can review,
+   sign off, or export to your PM tool.
+5. **Author** — build bottom-up in plan order with the authoring skills
+   (`assette-block-author` → `assette-data-object-author` → `assette-pptx-authoring` /
+   `assette-xlsx-authoring`).
+
+### Answering the clarifying questions
+
+The analysis asks targeted questions — sometimes a lot of them. **You do not need to
+answer them all up front.** Each **blocking** question holds back only its own
+table or chart (that component's Data Block → Data Object → Smart Shell, and the
+Smart Page it sits on) — everything else builds regardless. Claude shows you the
+**top 5 highest-priority questions** (compliance decisions like gross-vs-net first)
+plus grouped counts of the rest; answer the top ones early and the rest **as you
+build, in plan order** — when you reach a gated component, its question is simply the
+next thing to decide. Say *"show me all open questions"* any time for the full list.
+Reply like *"for `abc123:3:2` q1: net of fees"*; Claude records each answer. After
+answering, re-run `/propose-build` and `/build-timeline` — the newly unblocked work
+slots into the plan and schedule. That resolve → re-plan → re-timeline loop is the
+normal rhythm.
+
+### Checking your tenant's system data
+
+Assette needs certain **system datasets** from your firm to operate — account and
+product masters, attribute lists, currencies, benchmarks and their account
+associations. `/validate-system-data` executes each one in your environment and
+writes a plain-language readiness report (`workspace/system_data_report.md`) listing
+anything missing, empty, or invalid — and exactly what to provide, field by field.
+Review the report and send it to your data team. Missing required datasets hold back
+the final authoring step only; analysis and planning continue in parallel. When the
+data lands, run `/validate-system-data` again. You usually won't need to remember it:
+`/bind-sources` runs the check automatically at the end when you're already signed
+in, and the status footer keeps nudging until it's green.
+
+### No data sources handy?
+
+`/bind-sources` is the expected phase 2 — skipping it means every Data Block in the
+plan keeps an open "where does this data come from?" question to answer by hand at
+build time. If your data genuinely isn't available yet, say so explicitly and run
+`/propose-build` anyway; when the data arrives, run `/bind-sources` and re-run
+`/propose-build` — the plan upgrades automatically.
+
+### Working module by module
+
+Implementations usually roll out one **module** at a time — Factsheets first, then
+Pitchbooks, and so on. To get that for free, organize your deck folder **one
+subfolder per module** (`decks/Factsheets/…`, `decks/Pitchbooks/…`) before running
+`/analyze-deck`. The build plan then groups everything per module, `/propose-build`
+can plan a single module's rollout (*"plan the Factsheets module"*), and the
+timeline shows per-module progress and finish dates. Components shared across
+modules (the same holdings table in a factsheet and a pitchbook) are built **once**,
+with the first module that needs them — the plan marks them so they're designed for
+every consumer up front.
+
+### Coming back later
+
+Run **`/implementation-status`** in any session. It reads the workspace, shows which
+phases are done / pending / stale, lists the open blocking questions, and names the
+exact next command. The workspace folder is the only state — any session can resume it.
+
+### Best practices
+
+- **Build bottom-up, in plan order** — Data Blocks before the Data Objects that read
+  them, Data Objects before Shells and Pages. `/propose-build`'s order encodes this.
+- **Review the timeline before building** — it shows the human approval gates (the real
+  driver of calendar time), not just the build effort.
+- **Run `/validate-system-data` early** — client data gaps take the longest to fix,
+  and the gap report gives your data team a concrete, field-level ask.
+- **Answer the highest-leverage blocking questions first — but don't wait for all of
+  them.** Each question gates only its own component; build the unblocked work in
+  parallel and answer the rest as you reach them in plan order.
+- **Re-run `/propose-build` after anything changes underneath it** (new bindings, new
+  answers) — it's cheap, deterministic, and the footer will tell you when it's stale.
+- **Ask any time**: *"how do I implement these decks in Assette?"* loads the full
+  methodology guide.
+
+---
+
 ## Where to go for more detail
 
 The friendly README ends here, but everything that powers it lives
 one level down. Four paths in if you want to learn more:
+
+> **Note on the `skills/` links below**: only `skills/assette-plugin/` ships in
+> the plugin. Every other skill — the authoring skills AND the deck-analysis /
+> implementation-guide skills — is **downloaded from the hosted server** into
+> your installed plugin's `skills/` folder by "initialize assette" / "update
+> assette" after sign-in. The links resolve in an initialized install, not in
+> the plugin repository, and "update assette" always brings the latest versions
+> (no reinstall needed).
 
 - **[`skills/assette-plugin/`](./skills/assette-plugin/)** — the init / config skill.
   - [`SKILL.md`](./skills/assette-plugin/SKILL.md) — the eight operations Claude follows when you ask to initialize, switch tenants, sign out, reset, etc.
@@ -271,16 +447,31 @@ one level down. Four paths in if you want to learn more:
   - [`README.md`](./skills/assette-xlsx-authoring/README.md) — overview of the skill folder.
   - [`reference/`](./skills/assette-xlsx-authoring/reference/) — editor vocabulary, spec reference, `ExcelMetaData` schema, generation semantics.
 - **[`skills/assette-block-author/`](./skills/assette-block-author/)** — the data-block author.
-  - [`SKILL.md`](./skills/assette-block-author/SKILL.md) — entry point + workflows for creating, editing, and wiring data blocks.
+  - [`SKILL.md`](./skills/assette-block-author/SKILL.md) — the spine: universal mechanics + a 3-axis router (category → source family → data domain) that loads only the recipe fragments a block needs.
   - [`creating-data-blocks.md`](./skills/assette-block-author/creating-data-blocks.md) — categories, output types, dependencies, secrets.
-  - [`block-type-recipes.md`](./skills/assette-block-author/block-type-recipes.md) — per-block-type recipe cards.
+  - [`recipes/`](./skills/assette-block-author/recipes/) — the routed fragments: `category/` (block shape), `source/` (per-source-family `Definition` + connection wiring), `domain/` (investment-data design contract + System-block reuse), plus the System-blocks catalog.
 - **[`skills/assette-data-object-author/`](./skills/assette-data-object-author/)** — the data-object author.
   - [`SKILL.md`](./skills/assette-data-object-author/SKILL.md) — entry point + workflows (create / edit / dry-run).
   - [`managing-data-objects.md`](./skills/assette-data-object-author/managing-data-objects.md) — the eight MCP tools and the author lifecycle.
   - [`definition-anatomy.md`](./skills/assette-data-object-author/definition-anatomy.md) — every field of `DataObjectDefinitionV2`.
-  - [`flavour-recipes.md`](./skills/assette-data-object-author/flavour-recipes.md) — per-output-type recipes (data / text / values / bytes / list).
+  - [`recipes/`](./skills/assette-data-object-author/recipes/) — the routed fragments: `flavour/` (per-output-type recipes — data / text / values / bytes / list) and `domain/` (investment-data design contracts).
 - **[`skills/assette-classifications/`](./skills/assette-classifications/)** — content classification.
   - [`SKILL.md`](./skills/assette-classifications/SKILL.md) — the four facets (Buckets / Limitation / ComplianceTag / Ingredients), object types & levels, exact label-value formats, the dialog-vs-tools vocabulary map, and the discover → set → verify workflow.
+- **[`skills/assette-implementation-guide/`](./skills/assette-implementation-guide/)** — the implementation-journey methodology.
+  - [`SKILL.md`](./skills/assette-implementation-guide/SKILL.md) — the five-phase pipeline, the workspace artifact contract, the blocking-question loop, and the authoring best practices.
+- **[`commands/`](./commands/)** — the five pipeline commands.
+  - [`analyze-deck.md`](./commands/analyze-deck.md) — phase 1: analyze a corpus of existing decks.
+  - [`bind-sources.md`](./commands/bind-sources.md) — phase 2: bind deck columns to your real data sources.
+  - [`propose-build.md`](./commands/propose-build.md) — phase 3: compile the ranked build plan.
+  - [`build-timeline.md`](./commands/build-timeline.md) — phase 4: schedule the plan for review.
+  - [`validate-system-data.md`](./commands/validate-system-data.md) — phase 0: validate the tenant's required system datasets + the client gap report.
+  - [`implementation-status.md`](./commands/implementation-status.md) — where-am-I status + the next command, any time.
+- **The analysis skills** — the rubrics behind `/analyze-deck` (one line each):
+  [`content-ingestion`](./skills/content-ingestion/SKILL.md) (how decks are parsed),
+  [`element-classification`](./skills/element-classification/SKILL.md) (the tagging rubric),
+  [`investment-data-categories`](./skills/investment-data-categories/SKILL.md) (the financial-domain taxonomy),
+  [`authoring-component-identification`](./skills/authoring-component-identification/SKILL.md) (element → Assette primitive),
+  [`deep-table-chart-understanding`](./skills/deep-table-chart-understanding/SKILL.md) (the table/chart deep-read rubric).
 - **[`shim/`](./shim/)** — the local Python helper that connects Claude to Assette.
   - [`README.md`](./shim/README.md) — how the bootstrap, auth, and tool-proxy layers work.
 
