@@ -100,7 +100,7 @@ back to the baked-in defaults:
 
 ## Synthetic tools this skill calls
 
-All three are always available, even before any client code is
+All four are always available, even before any client code is
 configured or a venv exists:
 
 | Tool | Purpose |
@@ -108,6 +108,7 @@ configured or a venv exists:
 | `mcp__assette__shim_status` | Side-effect-free diagnostic. Returns the effective config, venv state, MSAL cache state, runtime paths, and node version. **Always safe to call.** |
 | `mcp__assette__bootstrap` | **Fabricator-only.** Ensures the Smart Page fabricator's `<plugin>/shim/.venv/` exists and the pinned pptx deps (python-pptx, lxml, pydantic, pyyaml, deepdiff) import cleanly. Idempotent. Returns `OK_ALREADY` / `OK_INSTALLED` / `ERR_NO_PYTHON` / `ERR_VENV_FAILED` / `ERR_PIP_FAILED` plus diagnostic tail. ~20-30s on a fresh install. **This skill (assette-plugin) does NOT call bootstrap as part of initialize** — the fabricator skill calls it on its own first op. Authors who only use the 19 `mcp__assette__*` upstream tools never need this. |
 | `mcp__assette__set_client_code` | Atomically writes the per-user `shim-config.json`. Accepts `clientCode` (required, validated `^[A-Z]{4}$`), `serverUrl` (optional), `maxFileSizeMb` (optional), `teamsChannelName` (optional; bare or `Team/Channel`, `""` clears), `teamsGraphClientId` (optional; GUID, `""` clears). Preserves unsupplied fields. Returns the absolute path written. |
+| `mcp__assette__sign_out` | Clears the cached B2C credentials for the configured `clientCode` (Op 4). Takes no arguments. Evicts the MSAL account from the in-memory cache AND deletes `<runtimeRoot>/msal/<CODE>.json`, then drops the cached tenant/token/upstream triple so the next call re-signs-in interactively. Returns `signedOut`, `evictedAccounts`, `providerWasInitialised`, `cacheFile*` fields and a `message`. Does NOT open the browser and does NOT change the tenant. **Use this instead of deleting the cache file with Bash** — a file delete leaves the account live in MSAL's in-memory cache, so the user is never actually signed out. |
 
 ## Credential cache (`<runtimeRoot>/msal/`)
 
@@ -511,14 +512,30 @@ in?". This operation provides that on-demand path.
 When the user explicitly asks to clear credentials, sign out, or
 re-authenticate:
 
-1. Read `shim_status.config.clientCode` to find the current tenant.
-2. Delete `<runtimeRoot>/msal/<current_code>.json` via Bash /
-   PowerShell. Surface a clear "no cache to clear" message if the
-   file doesn't exist.
+1. Call `mcp__assette__sign_out` (no arguments). That single call does
+   all of the work: it evicts the MSAL account from **both** the
+   in-memory token cache and the on-disk
+   `<runtimeRoot>/msal/<CODE>.json`, then drops the shim's cached
+   tenant / token / upstream triple so the next call rebuilds them.
+2. **Never sign the user out by deleting the cache file with Bash /
+   PowerShell.** That was the old procedure and it does not work: MSAL
+   reads the file into memory on the first cache access of the shim
+   process, and its `beforeCacheAccess` hook no-ops when the file is
+   missing — so the account and its refresh token stay live in memory,
+   the next silent acquire succeeds, and the user is never re-prompted.
+   Only `sign_out` evicts both copies.
 3. **Do not** touch `shim-config.json` — the user wants to re-auth,
-   not change tenants.
-4. Tell the user: *"Credential cache cleared. The next
-   `mcp__assette__*` tool call will open the browser for sign-in."*
+   not change tenants. `sign_out` leaves the tenant unchanged.
+4. Report from the reply:
+   - `signedOut: true` → *"Credentials cleared for `<CODE>`. The next
+     `mcp__assette__*` tool call will open the browser for sign-in."*
+     Mention `evictedAccounts` if non-empty so the user can see which
+     identity was cleared.
+   - `signedOut: false` with a "nothing to clear" message → tell them
+     they were already signed out; no action needed.
+   - `cacheFileError` present → the in-memory sign-in was still
+     evicted (so sign-in WILL be re-prompted), but the cache file
+     couldn't be deleted; surface the path and the OS error.
 
 ### 5. Reset config (delete shim-config.json)
 
@@ -677,8 +694,11 @@ settings. `maxFileSizeMb` and the two `teams*` settings don't even need a
 teardown — they're read fresh on every call (the Teams tools have their own
 Graph auth, independent of the Assette upstream).
 
-For a credentials-only clear (Op 4), nothing needs to restart either
-— the next call just re-auths through the browser.
+For a credentials-only clear (Op 4), nothing needs to restart either —
+but only because `mcp__assette__sign_out` tears down the in-memory MSAL
+account along with the cached triple. Deleting the cache file by hand
+does NOT achieve this: the shim process keeps the account in memory and
+keeps refreshing off it. Always use the tool.
 
 ## What this skill is NOT for
 
