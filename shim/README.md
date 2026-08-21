@@ -3,7 +3,7 @@
 This directory holds **the implementation helper scripts** that ship inside
 the Assette plugin. As of v0.2.0 it is NOT the MCP shim —
 the MCP shim is a Node.js esbuild bundle at
-`<plugin>/bin/assette-mcp-shim.bundle.js` (source under `../../shim-node/`
+`<plugin>/dist/assette-mcp-shim.bundle.js` (source under `../../shim-node/`
 in the ast-mcp-server monorepo).
 
 ## Layout

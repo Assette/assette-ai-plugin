@@ -1,6 +1,6 @@
 {
   "name": "assette",
-  "version": "0.16.1",
+  "version": "0.16.2",
   "description": "Assette Implementation — Node.js MCP shim + the plugin-config skill + the deck-analysis / implementation-pipeline commands, agents and tools. The author-facing skills (PowerPoint / Excel / Word smart-page fabricators, Data Doc author, block author, data-object author, content classification, plus general orientation) and the deck-analysis / implementation skills are delivered by the hosted server after sign-in via 'initialize assette' / 'update assette'.",
   "author": {
     "name": "Assette"
@@ -11,7 +11,7 @@
   "mcpServers": {
     "assette": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/assette-mcp-shim.bundle.js"],
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/assette-mcp-shim.bundle.js"],
       "env": {
         "ASSETTE_PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}"
       }
