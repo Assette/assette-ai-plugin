@@ -1,6 +1,12 @@
 ---
 name: build-timeline
-description: Turn a build_plan.json (from /propose-build) into a reviewable implementation TIMELINE — a Gantt chart, the critical path, a schedule table, a CSV/MS-Project export, a work-breakdown, and a gate register — so a human can review and sign off on the timeline before any building starts. READ-ONLY: it schedules and renders; it builds NOTHING, calls no MCP tool, and needs no tenant. Phase 4 of the five-phase implementation pipeline (methodology: the assette-implementation-guide skill).
+description: >-
+  Turn a build_plan.json (from /propose-build) into a reviewable implementation TIMELINE — a Gantt
+  chart, the critical path, a schedule table, a CSV/MS-Project export, a work-breakdown, and a
+  gate register — so a human can review and sign off on the timeline before any building starts.
+  READ-ONLY: it schedules and renders; it builds NOTHING, calls no MCP tool, and needs no tenant.
+  Phase 4 of the five-phase implementation pipeline (methodology: the assette-implementation-guide
+  skill).
 argument-hint: "<workspace path (default ./workspace) — must contain build_plan.json from /propose-build>"
 ---
 

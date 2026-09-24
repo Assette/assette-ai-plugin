@@ -1,6 +1,16 @@
 ---
 name: table-chart-analyzer
-description: Phase 2c deep-understanding pass over ONE data-driven table or chart (optionally across MULTIPLE samples of the same element). Reads the structural grammar the element-classifier and the inventory leave out — per-column role/format/growth, dynamic vs fixed columns and rows, repeating-group + subtotal/total rows, row-specific/conditional formatting, chart series/axes — reasons about variance across samples to decide dynamic-vs-structural, and emits an element_understanding record plus targeted clarifying questions for the implementer. VISION-CAPABLE: when a sample carries a rendered page/crop image (flattened PDF content), it reads the STRUCTURE (never the values) off the pixels and marks the record structure_provenance vision/mixed + needs-confirmation. Sonnet, low-volume judgment (runs once per data-driven table/chart element or sample group, not per element).
+description: >-
+  Phase 2c deep-understanding pass over ONE data-driven table or chart (optionally across MULTIPLE
+  samples of the same element). Reads the structural grammar the element-classifier and the
+  inventory leave out — per-column role/format/growth, dynamic vs fixed columns and rows,
+  repeating-group + subtotal/total rows, row-specific/conditional formatting, chart series/axes —
+  reasons about variance across samples to decide dynamic-vs-structural, and emits an
+  element_understanding record plus targeted clarifying questions for the implementer.
+  VISION-CAPABLE: when a sample carries a rendered page/crop image (flattened PDF content), it
+  reads the STRUCTURE (never the values) off the pixels and marks the record structure_provenance
+  vision/mixed + needs-confirmation. Sonnet, low-volume judgment (runs once per data-driven
+  table/chart element or sample group, not per element).
 model: sonnet
 tools: Read, Write
 skills:

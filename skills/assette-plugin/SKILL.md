@@ -1,6 +1,20 @@
-﻿---
+---
 name: assette-plugin
-description: Invoke as `assette:assette-plugin` (Claude Code namespaces every plugin skill as `<plugin>:<skill>`; the bare `assette-plugin` does not resolve). Initialize, authenticate, and manage the Assette MCP plugin. Drives first-time setup (capture client code + server URL, open the browser for B2C sign-in, then download the author-facing skills from the server), updates/syncs those downloaded skills to the latest versions, switches the Assette tenant (clientCode), changes the hosted MCP server URL — including by environment alias (`local`, `dev`/`development`, `qa`, `prd`/`production`) which resolve to the canonical Assette URLs — raises or lowers the upload size cap, clears cached B2C credentials, wipes the local DataObjects / SmartPages / DataBlocks cache folders, or just shows the current effective config. Triggers on phrases like "initialize Assette plugin", "init assette", "set up Assette", "first-time Assette setup", "connect me to Assette", "update Assette plugin", "update assette", "sync Assette skills", "download the Assette skills", "sign in to Assette", "authenticate me", "log in", "change my Assette client code", "switch Assette tenant", "set Assette server to dev", "set Assette MCP server url to production", "update Assette MCP server to use local server url", "use the qa MCP server", "point at the production server", "increase upload limit to N MB", "clear Assette credentials", "sign out from Assette", "wipe my Assette caches", "reset my Assette config", "show current Assette settings", "what's my Assette tenant", "remove the assette-block-author skill", "uninstall an Assette skill", "delete a downloaded Assette skill from my machine".
+description: >-
+  Invoke as `assette:assette-plugin` (the bare name does not resolve). Initialize, authenticate
+  and manage the Assette MCP plugin: first-time setup (client code + server URL, B2C sign-in, then
+  download the author-facing skills), updating/syncing those skills, switching the Assette tenant
+  (clientCode), changing the hosted MCP server URL — including by environment alias (`local`,
+  `dev`, `qa`, `prd`) — raising or lowering the upload size cap, clearing cached credentials,
+  wiping the local DataObjects / SmartPages / DataBlocks caches, or showing the current effective
+  config. STRICT TRIGGER — invoke for any setup, sign-in, update or configuration request aimed at
+  the Assette PLUGIN itself rather than at Assette content. Example matches — "initialize Assette
+  plugin", "set up Assette", "update assette", "sync Assette skills", "log in", "change my Assette
+  client code", "switch Assette tenant", "set Assette server to dev", "use the qa MCP server",
+  "increase upload limit to 50 MB", "clear Assette credentials", "sign out from Assette", "wipe my
+  Assette caches", "show current Assette settings", "uninstall an Assette skill". Example
+  non-matches — authoring or reading Assette content of any kind (the per-domain skills), and
+  anything about a tenant's data rather than this machine's plugin config.
 ---
 
 # Assette MCP plugin — initialization + configuration
@@ -70,7 +84,7 @@ plugin-marketplace location) holds:
 | `<plugin>/shim/.venv/` | Python venv used **only by the Smart Page fabricator skill** for the pptx-helper scripts. Created on first `mcp__assette__bootstrap` call from the fabricator skill. Not needed for sign-in or any of the 19 `mcp__assette__*` upstream tools. |
 | `<plugin>/shim/assette_mcp_shim/scripts/` | The five fabricator helper scripts (Python). |
 | `<plugin>/skills/assette-plugin/` | This skill — the ONLY skill shipped in the plugin. |
-| `<plugin>/skills/<other>/` | The fourteen server-delivered skills (eight author-facing + six deck-analysis / implementation), **downloaded on demand** by Initialize / Update (not shipped). Extracted here by `get_skill` so Claude Code auto-discovers them next session. |
+| `<plugin>/skills/<other>/` | The seventeen server-delivered skills (eleven author-facing + six deck-analysis / implementation), **downloaded on demand** by Initialize / Update (not shipped). Extracted here by `get_skill` so Claude Code auto-discovers them next session. |
 
 `shim_status` reports the resolved values of all of these paths so you
 can confirm where the shim is reading from before mutating anything.
@@ -150,7 +164,7 @@ truth for the wipe.
 Only **this** skill (`assette-plugin`) ships inside the installed plugin. Every
 other skill is server-delivered, in two groups:
 
-The ten **author-facing** skills —
+The eleven **author-facing** skills —
 
 - `assette-general`
 - `assette-block-author`
@@ -162,6 +176,7 @@ The ten **author-facing** skills —
 - `assette-data-doc-authoring`
 - `assette-content-plan-management`
 - `assette-commentary-implementation`
+- `assette-web-shell-authoring`
 
 — expose Assette internals; the six **deck-analysis / implementation** skills —
 
@@ -175,7 +190,7 @@ The ten **author-facing** skills —
 — are the rubrics behind the `/analyze-deck` → `/propose-build` pipeline
 commands (which DO ship in the plugin) and are versioned server-side so updates
 reach authors without a plugin reinstall. Neither group is shipped in the
-public plugin. All sixteen live inside the hosted, B2C-gated MCP server and
+public plugin. All seventeen live inside the hosted, B2C-gated MCP server and
 are **downloaded on demand** by the *Initialize* / *Update* operations below,
 into the installed plugin's own `skills/` directory, only after the user has
 signed in. (Consequence: the deck-analysis pipeline commands need a completed
@@ -209,10 +224,16 @@ Paths come from `mcp__assette__shim_status`:
 
 - `runtime.pluginSkillsDir` — where downloaded skills are extracted
   (`<pluginRoot>/skills`). The per-skill target is `<pluginSkillsDir>/<skill>`.
+  **This path is VERSION-SPECIFIC** — `<pluginRoot>` ends in the installed
+  plugin version — so every plugin upgrade starts from an empty skills dir
+  holding only the shipped `assette-plugin`.
 - `runtime.localSkillsManifest` — the **local** `skills.json`
-  (`<runtimeRoot>/skills.json`, beside `shim-config.json`) tracking which
-  versions are already installed. `runtime.localSkillsManifestExists` reports
-  whether it's there yet.
+  (`<runtimeRoot>/skills.json`, beside `shim-config.json`) recording the
+  version last downloaded per skill. `runtime.localSkillsManifestExists`
+  reports whether it's there yet. **It is version-INDEPENDENT and therefore
+  survives plugin upgrades, so it can claim a skill is installed when the
+  current install dir has no copy** — never treat it as proof of what is on
+  disk; "Sync skills" step 2 enumerates the folders for that.
 
 The local `skills.json` has the same shape as the server's:
 
@@ -227,9 +248,26 @@ in (an authenticated `mcp__assette__*` call has succeeded).
 
 1. Read `mcp__assette__shim_status`; capture `runtime.pluginSkillsDir` and
    `runtime.localSkillsManifest`.
-2. Read the local manifest with the **Read tool** if
-   `runtime.localSkillsManifestExists` is true; otherwise treat every skill as
-   "not installed". Parse it into a `{ skill → installedVersion }` map.
+2. Establish what is installed — **two inputs, and the disk wins**:
+   - Read the local manifest with the **Read tool** if
+     `runtime.localSkillsManifestExists` is true; otherwise treat every skill
+     as "not installed". Parse it into a `{ skill → installedVersion }` map.
+     This gives you VERSIONS.
+   - **Enumerate the folders actually present** in `runtime.pluginSkillsDir`
+     (Bash `ls -1`, or the PowerShell tool's `Get-ChildItem -Directory`) and
+     keep the names that contain a `SKILL.md`. This gives you PRESENCE, and it
+     is the authority on what is installed.
+
+   **Why the second input is not optional:** downloaded skills live under the
+   VERSION-SPECIFIC plugin install dir
+   (`…/plugins/cache/<marketplace>/assette/<version>/skills/`) while the
+   manifest lives in the version-independent runtime root. A plugin upgrade
+   therefore leaves the new install holding only the shipped `assette-plugin`
+   while the manifest still claims every other skill is current. Trusting the
+   manifest alone re-downloads ONLY the skills whose server version happens to
+   have changed, and each unchanged skill is reported "up to date" while being
+   absent from disk. (Observed on a real machine: 2 of 17 author skills
+   present after two plugin upgrades.)
 3. Call `mcp__assette__get_skill_versions`. If it returns a non-200
    (`statusCode` in `body`), stop and report — the server has no catalog.
 4. **Retire skills the server no longer serves — this is the mechanism that
@@ -247,9 +285,14 @@ in (an authenticated `mcp__assette__*` call has succeeded).
    - Drop it from the in-memory manifest map so step 7 doesn't write it back.
    - Track its name to report as "removed" in the final summary.
 5. For each remaining `{ skill, latestVersion }` (i.e. not retired in step 4)
-   with a non-empty `latestVersion`, download when the skill is **missing
-   locally** OR `latestVersion` differs from the installed version (treat any
-   difference as "update available"):
+   with a non-empty `latestVersion`, decide whether to download. **Skip it
+   only when BOTH hold — anything else means download:** its folder is in the
+   on-disk set from step 2, **and** the manifest's `installedVersion` equals
+   `latestVersion` (any difference, in either direction, means download). So a
+   skill missing from `pluginSkillsDir` is ALWAYS re-downloaded, however
+   current the manifest claims it is — never shortcut to a version comparison
+   alone, because the presence check is the half that survives a plugin
+   upgrade. Then, for each skill to download:
    - Call `mcp__assette__get_skill(skill=<skill>,
      path="<pluginSkillsDir>/<skill>")`. Build the `path` by joining
      `runtime.pluginSkillsDir` + the OS separator + `<skill>` (the shim wipes
@@ -262,11 +305,14 @@ in (an authenticated `mcp__assette__*` call has succeeded).
      read-only store), report the exact `path` from the error and stop — the
      author must make that directory writable (or the plugin must be installed
      somewhere writable). Do **not** silently continue.
-6. Skip skills already at the latest version (report them as "up to date").
+6. Skip a skill only when step 5 found it BOTH on disk and at `latestVersion`
+   (report those as "up to date").
 7. Write the refreshed manifest back to `runtime.localSkillsManifest` with the
    **Write tool** — every skill that is actually installed after this sync
    (skills retired in step 4 excluded; skills installed/updated/confirmed in
-   step 5 included).
+   step 5 included). Record the `version` each `get_skill` reply returned, so
+   the manifest describes THIS install dir's contents rather than a previous
+   one's.
 8. Tell the user which skills were installed / updated / removed / skipped,
    then instruct them to **start a new Claude Code session** so the host
    discovers the freshly-installed skills and drops the removed ones
@@ -321,13 +367,24 @@ install that most authors never use is bad first-run UX.
      `^[A-Z]{4}$`). Re-prompt on invalid input, naming the rule.
 
 3. **Capture the MCP server URL.** Read `shim_status.config.serverUrl`.
-   - If the config file does **not** exist yet (`config.fileExists == false`),
-     the server URL is only the baked-in default — **ask** the user which
-     environment to use: *"Which Assette environment? Say `prd` (production,
-     the default), `qa`, `dev`, or paste a full server URL."* Accept an
-     environment alias (`local` / `dev` / `qa` / `prd`) or a full `http(s)://`
-     URL — pass it through verbatim (see Op 2; the shim resolves aliases). If
-     the user just wants the default, use `prd`.
+   - If `shim_status.config.serverEnvLock` is **non-null** (the QA / PRD
+     plugin variants are pinned to their environment), do **NOT** ask about
+     the environment — there is nothing to choose. Skip straight to step 4
+     without a `serverUrl` argument. **Say nothing about the lock when it is
+     `prd`** — end clients only ever see the production plugin and must not
+     be made aware that internal DEV/QA environments exist; the plugin just
+     works against the production server. Only when the lock is `qa` (an
+     internal/testing build), mention it in passing: *"This plugin build is
+     locked to the QA environment (`<serverUrl>`)."*
+   - Otherwise, if the config file does **not** exist yet
+     (`config.fileExists == false`), the server URL is only the baked-in
+     default — **ask** the user which environment to use: *"Which Assette
+     environment? Say `prd` (production, the default), `qa`, `dev`, or paste
+     a full server URL."* Accept an environment alias (`local` / `dev` /
+     `qa` / `prd`) or a full `http(s)://` URL — pass it through verbatim
+     (see Op 2; the shim resolves aliases). If the user just wants the
+     default, use `prd`. (On the DEV plugin variant the baked-in default is
+     already the DEV server; treat "just use the default" as keeping that.)
    - If the config file already exists, keep the configured `serverUrl` — don't
      re-prompt.
 
@@ -480,6 +537,26 @@ in?". This operation provides that on-demand path.
    sign in to `<NEW>` on the first call."*
 
 ### 2. Change the MCP server URL
+
+0. **Check for an environment-locked build first.** The QA and PRD
+   plugin variants (installed from `Assette/assette-ai-plugin-qa` /
+   `Assette/assette-ai-plugin`) are **pinned** to their environment:
+   `shim_status.config.serverEnvLock` is non-null (`"qa"` / `"prd"`)
+   and `set_client_code` rejects any other `serverUrl` with
+   `shim.config.server_url_locked`. If the lock is set, don't attempt
+   the change — but tailor the reply to the lock:
+   - Lock `prd` (what end clients have): *"This plugin always works
+     against the Assette production server — the server URL isn't a
+     configurable setting."* Do **NOT** mention DEV/QA environments,
+     other plugin builds, or the lock mechanism — end clients must
+     not be made aware internal environments exist.
+   - Lock `qa` (internal/testing build): *"This plugin build is
+     locked to the QA environment. To work against a different
+     environment, install that environment's plugin (the DEV build
+     from `Assette/assette-ai-plugin-dev` allows switching)."*
+
+   Only the DEV build (and source-repo installs) keep the switchable
+   behaviour below.
 
 1. **Pass the alias straight through — the shim resolves it.** The
    `mcp__assette__set_client_code` tool now resolves environment
@@ -643,11 +720,25 @@ Trigger phrases: *"update Assette plugin"*, *"update assette"*, *"sync Assette
 skills"*, *"download the latest Assette skills"*, *"are my Assette skills up to
 date?"*.
 
+**There is also a slash command for exactly this: `/assette:update-skills`.**
+It ships in the plugin's `commands/` and carries a self-contained copy of the
+procedure below, so it works even when this skill is unavailable — and being
+typed rather than matched, it cannot fail to trigger. Point users at it when
+they ask how to update their skills reliably; run it, rather than this op,
+when the request is *only* about skills and not about tenant / URL /
+credentials. Keep the two in step: **a change to the Sync skills subroutine
+must be mirrored into `commands/update-skills.md`.**
+
 This refreshes the **server-delivered** author skills to the versions the
 hosted server currently offers — including removing any local skill folder
 the server has retired (e.g. because it was renamed; see "Renaming a
 server-delivered skill" above). It does **not** change tenant, server URL, or
 credentials.
+
+**Run this after every plugin upgrade, even when nothing else changed.** The
+skills install into the version-specific `pluginSkillsDir`, so a freshly
+upgraded plugin has none of them until this op re-downloads them (the on-disk
+enumeration in step 2 of the subroutine is what makes that detection reliable).
 
 **Procedure.**
 
@@ -730,7 +821,7 @@ immediate re-prompt instead of waiting for a tool round-trip:
 | Key | Rule |
 |---|---|
 | `clientCode` | Trim → uppercase → must match exactly `^[A-Z]{4}$`. Returns `shim.config.invalid_client_code` on failure. |
-| `serverUrl` | Must start with `http://` or `https://`; trailing `/` stripped. Returns `shim.config.invalid_server_url` on failure. |
+| `serverUrl` | Must start with `http://` or `https://`; trailing `/` stripped. Returns `shim.config.invalid_server_url` on failure. On an environment-locked build (QA/PRD plugin variants; `shim_status.config.serverEnvLock` non-null) any value other than the pinned environment's URL returns `shim.config.server_url_locked`. |
 | `maxFileSizeMb` | Positive integer between 1 and 10240. Returns `shim.config.invalid_max_file_size` on failure. |
 | `teamsChannelName` | Trimmed; rejects control characters. `""` clears. Returns `shim.config.invalid_teams_channel_name` on failure. |
 | `teamsGraphClientId` | GUID (braces stripped, lower-cased). `""` clears. Returns `shim.config.invalid_teams_graph_client_id` on failure. |

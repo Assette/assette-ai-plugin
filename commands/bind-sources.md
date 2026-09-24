@@ -1,6 +1,15 @@
 ---
 name: bind-sources
-description: Connect the deck analysis to the firm's ACTUAL DATA — ingest human-provided data sources (CSV / Excel data files, a Snowflake INFORMATION_SCHEMA dump, or .sql DDL), then match every data-driven deck element's columns against the source tables/columns and emit ranked, catalog-grounded binding proposals (deck "Weight %" ↔ HOLDINGS.WEIGHT_PCT). Turns the Data Block source question in /propose-build from an open ask into a human confirmation. Runs AFTER /analyze-deck (needs element_understanding.jsonl); the binding itself is fully local — no tenant needed — but it CLOSES by auto-running the /validate-system-data check (phase 0) when a signed-in tenant is already available, so system-data gaps surface alongside the bindings. Phase 2 of the implementation pipeline (methodology: the assette-implementation-guide skill).
+description: >-
+  Connect the deck analysis to the firm's ACTUAL DATA — ingest human-provided data sources (CSV /
+  Excel data files, a Snowflake INFORMATION_SCHEMA dump, or .sql DDL), then match every
+  data-driven deck element's columns against the source tables/columns and emit ranked,
+  catalog-grounded binding proposals (deck "Weight %" ↔ HOLDINGS.WEIGHT_PCT). Turns the Data Block
+  source question in /propose-build from an open ask into a human confirmation. Runs AFTER
+  /analyze-deck (needs element_understanding.jsonl); the binding itself is fully local — no tenant
+  needed — but it CLOSES by auto-running the /validate-system-data check (phase 0) when a
+  signed-in tenant is already available, so system-data gaps surface alongside the bindings. Phase
+  2 of the implementation pipeline (methodology: the assette-implementation-guide skill).
 argument-hint: "<sources path: a folder (or single file) of .csv/.xlsx/.json/.sql sources> [workspace path, default ./workspace]"
 ---
 

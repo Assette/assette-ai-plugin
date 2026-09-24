@@ -459,7 +459,8 @@ one level down. Four paths in if you want to learn more:
   - [`SKILL.md`](./skills/assette-classifications/SKILL.md) — the four facets (Buckets / Limitation / ComplianceTag / Ingredients), object types & levels, exact label-value formats, the dialog-vs-tools vocabulary map, and the discover → set → verify workflow.
 - **[`skills/assette-implementation-guide/`](./skills/assette-implementation-guide/)** — the implementation-journey methodology.
   - [`SKILL.md`](./skills/assette-implementation-guide/SKILL.md) — the five-phase pipeline, the workspace artifact contract, the blocking-question loop, and the authoring best practices.
-- **[`commands/`](./commands/)** — the five pipeline commands.
+- **[`commands/`](./commands/)** — the deck-implementation pipeline commands, plus the skill sync.
+  - [`update-skills.md`](./commands/update-skills.md) — download every server-delivered skill; run it after each plugin upgrade.
   - [`analyze-deck.md`](./commands/analyze-deck.md) — phase 1: analyze a corpus of existing decks.
   - [`bind-sources.md`](./commands/bind-sources.md) — phase 2: bind deck columns to your real data sources.
   - [`propose-build.md`](./commands/propose-build.md) — phase 3: compile the ranked build plan.

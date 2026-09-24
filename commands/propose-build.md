@@ -1,6 +1,11 @@
 ---
 name: propose-build
-description: Turn a finished /analyze-deck workspace into a PROPOSED build plan — a topo-sorted, impact-ranked Data Block → Data Object → Smart Shell → Smart Page DAG, plus the up-front blocking-question batch a human must resolve before building. READ-ONLY: it proposes and ranks the work; it builds NOTHING, calls no MCP tool, and needs no tenant. Phase 3 of the five-phase implementation pipeline (methodology: the assette-implementation-guide skill).
+description: >-
+  Turn a finished /analyze-deck workspace into a PROPOSED build plan — a topo-sorted,
+  impact-ranked Data Block → Data Object → Smart Shell → Smart Page DAG, plus the up-front
+  blocking-question batch a human must resolve before building. READ-ONLY: it proposes and ranks
+  the work; it builds NOTHING, calls no MCP tool, and needs no tenant. Phase 3 of the five-phase
+  implementation pipeline (methodology: the assette-implementation-guide skill).
 argument-hint: "<workspace path (default ./workspace) — a finished /analyze-deck workspace>"
 ---
 
